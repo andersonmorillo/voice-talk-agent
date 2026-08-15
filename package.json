@@ -1,18 +1,18 @@
 {
-  "name": "talktocursor",
+  "name": "talk-to-cursor",
   "version": "1.0.0",
   "description": "Hands-free voice interface for Cursor AI. Local Pocket TTS by default, with optional ElevenLabs cloud TTS.",
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "talktocursor": "./build/index.js"
+    "talk-to-cursor": "./build/index.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x build/index.js",
+    "build": "tsc",
     "watch": "tsc --watch",
     "settings": "node build/settings-server.js",
     "pocket-tts": "uvx pocket-tts serve --host 127.0.0.1 --port 8000",
-    "auto-submit": ".venv/bin/python scripts/auto-submit.py",
+    "auto-submit": "python scripts/auto-submit.py",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -27,20 +27,17 @@
     "model-context-protocol",
     "ai-assistant"
   ],
-  "author": "Mike Sheehan",
+  "author": "nosre",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/MindSyncTech/cursor-tts-mcp"
-  },
-  "homepage": "https://talktocursor.com",
   "files": [
     "build/",
     "public/",
     "scripts/*.py",
-    "INSTALL.md",
     "README.md"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.34.0",
     "@modelcontextprotocol/sdk": "^1.26.0",

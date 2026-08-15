@@ -1,0 +1,33 @@
+{
+  "ttsProvider": "pocket-tts",
+  "pocketTts": {
+    "baseUrl": "http://127.0.0.1:8000",
+    "voice": "alba",
+    "language": "english",
+    "autoStart": true
+  },
+  "apiKey": "",
+  "voiceId": "21m00Tcm4TlvDq8ikWAM",
+  "model": "eleven_flash_v2_5",
+  "voiceSettings": {
+    "speed": 1.0,
+    "stability": 0.5,
+    "similarityBoost": 0.75,
+    "style": 0.0
+  },
+  "autoSubmit": {
+    "enabled": false,
+    "silenceDelay": 3.0,
+    "minTextLength": 15,
+    "targetApp": "Cursor"
+  },
+  "wisprLoop": {
+    "enabled": false,
+    "ttsDelay": 8.0,
+    "silenceThreshold": 0.02,
+    "silenceDuration": 2.0,
+    "wisprHotkey": "shift+ctrl",
+    "manualTriggerHotkey": "ctrl+shift+l"
+  },
+  "autoListen": true
+}
