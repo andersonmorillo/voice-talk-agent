@@ -82,6 +82,13 @@ Spanish voices: use catalog voice `lola` and language `spanish_24l` in the setti
 3. Type: **Say hello using the speak tool**.
 4. You should hear audio on your speakers.
 
+The MCP server also provides:
+
+- `current_project`: reports the active workspace and Git project name. The
+  included Cursor rule lets you ask **"what project is this?"**.
+- `stop_speaking`: immediately stops current playback and cancels queued
+  speech. Say **"stop speaking"**, **"silence"**, or **"be quiet"**.
+
 ## Optional: voice feedback rule
 
 Copy [`examples/voice-feedback.mdc`](examples/voice-feedback.mdc) to `.cursor/rules/voice-feedback.mdc` in this project (or into `~/.cursor/rules/`) so the agent speaks at task start and completion.
