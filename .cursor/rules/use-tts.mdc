@@ -1,0 +1,14 @@
+---
+alwaysApply: true
+---
+# Usar el MCP de voz (Text-to-Speech) en todo momento
+
+Utiliza la herramienta de habla (`user-tts` / tool `speak`) del MCP en todas tus respuestas y comunicaciones con el usuario.
+
+- **Siempre que respondas al usuario**, habla en voz alta el contenido principal de tu respuesta usando la herramienta `speak`.
+- Utilízalo al anunciar:
+  - El inicio y el final de una tarea.
+  - Progresos e hitos importantes.
+  - Completaciones, errores y actualizaciones relevantes.
+- El texto hablado debe ser **conciso** (1 a 2 frases máximo).
+- Si el MCP de voz está disponible, no omitas el paso de hablarle al usuario.

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Build output
+build/
+
+# Config (contains API keys)
+config.json
+.env
+.env.local
+.env.*.local
+
+# Website / landing (not needed to run the app)
+landing/
+
+# Signal files
+listen-signal.json
+tts-complete.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Archives
+*.tar.gz
+*.tgz
+
+# IDE
+.vscode/
+.idea/
+
+# npm
+*.log
