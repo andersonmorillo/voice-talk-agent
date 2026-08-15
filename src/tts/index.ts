@@ -2,6 +2,7 @@ import type { Config } from "../config.js";
 import { speakWithElevenLabs } from "./elevenlabs.js";
 import { ensurePocketTtsServer } from "./ensure-server.js";
 import { isPocketTtsHealthy, speakWithPocketTts } from "./pocket-tts.js";
+import { stopPlayback } from "./play.js";
 
 export async function speak(config: Config, text: string): Promise<void> {
   if (config.ttsProvider === "elevenlabs") {
@@ -19,6 +20,8 @@ export async function speak(config: Config, text: string): Promise<void> {
 
   await speakWithPocketTts(config, text);
 }
+
+export { stopPlayback };
 
 export { speakWithElevenLabs } from "./elevenlabs.js";
 export { ensurePocketTtsServer } from "./ensure-server.js";

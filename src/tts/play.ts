@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 const isWindows = process.platform === "win32";
+let activeChild: ReturnType<typeof spawn> | undefined;
 
 function run(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -13,8 +14,12 @@ function run(command: string, args: string[]): Promise<void> {
       shell: isWindows,
       windowsHide: true,
     });
+    activeChild = child;
     child.on("error", reject);
     child.on("close", (code) => {
+      if (activeChild === child) {
+        activeChild = undefined;
+      }
       if (code === 0) {
         resolve();
       } else {
@@ -22,6 +27,17 @@ function run(command: string, args: string[]): Promise<void> {
       }
     });
   });
+}
+
+/** Stop the currently playing audio, if any. */
+export function stopPlayback(): boolean {
+  if (!activeChild) {
+    return false;
+  }
+
+  activeChild.kill();
+  activeChild = undefined;
+  return true;
 }
 
 async function playWithMpv(filePath: string): Promise<void> {

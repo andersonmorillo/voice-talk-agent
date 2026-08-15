@@ -4,10 +4,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getEffectiveConfig } from "./config.js";
-import { speak } from "./tts/index.js";
+import { speak, stopPlayback } from "./tts/index.js";
 import { writeFileSync } from "fs";
-import { join, dirname } from "path";
+import { basename, dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+import { execFileSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,6 +91,18 @@ function queueTTS(text: string): Promise<any> {
   });
 }
 
+function stopTTS(): number {
+  const queuedCount = ttsQueue.length;
+  while (ttsQueue.length > 0) {
+    const item = ttsQueue.shift()!;
+    item.resolve({
+      content: [{ type: "text", text: "Speech cancelled before playback." }],
+    });
+  }
+  stopPlayback();
+  return queuedCount;
+}
+
 // Register the speak tool
 server.registerTool(
   "speak",
@@ -105,6 +118,72 @@ server.registerTool(
   async ({ text }) => {
     // Queue the TTS request to prevent overlapping audio
     return await queueTTS(text);
+  }
+);
+
+// Register the stop-speaking tool
+server.registerTool(
+  "stop_speaking",
+  {
+    description:
+      "Immediately stop current audio playback and cancel queued speech. Use when the user says stop speaking, be quiet, silence, or stop.",
+    inputSchema: {},
+  },
+  async () => {
+    const queuedCount = stopTTS();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Speech stopped. Cancelled ${queuedCount} queued message${queuedCount === 1 ? "" : "s"}.`,
+        },
+      ],
+    };
+  }
+);
+
+// Register the current-project tool
+server.registerTool(
+  "current_project",
+  {
+    description:
+      "Identify the project/workspace currently being used. Use when the user asks which project or agent workspace is active.",
+    inputSchema: {
+      projectPath: z
+        .string()
+        .optional()
+        .describe("Optional workspace path supplied by the agent; defaults to the MCP process workspace."),
+    },
+  },
+  async ({ projectPath }) => {
+    const workspacePath = resolve(projectPath || process.cwd());
+    let gitRoot = "";
+    try {
+      gitRoot = execFileSync("git", ["-C", workspacePath, "rev-parse", "--show-toplevel"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      // The workspace may not be a Git repository.
+    }
+
+    const projectName = basename(gitRoot || workspacePath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              projectName,
+              workspacePath,
+              gitRoot: gitRoot || null,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
   }
 );
 
