@@ -85,9 +85,16 @@ Spanish voices: use catalog voice `lola` and language `spanish_24l` in the setti
 The MCP server also provides:
 
 - `current_project`: reports the active workspace and Git project name. The
-  included Cursor rule lets you ask **"what project is this?"**.
+  included Cursor rule and skill let you distinguish which agent is speaking when running concurrent projects.
 - `stop_speaking`: immediately stops current playback and cancels queued
   speech. Say **"stop speaking"**, **"silence"**, or **"be quiet"**.
+
+## Skills & Voice Feedback Modes
+
+A dedicated Agent Skill is available at `.cursor/skills/voice-feedback/SKILL.md` (and globally in `~/.cursor/skills/voice-feedback/`):
+
+1. **Project-Aware Mode**: Prefixes spoken updates with the active project name (e.g. `"[talk-to-cursor]: Finished build."`) so you can identify which agent/workspace is giving feedback when working on multiple projects in parallel.
+2. **Direct Mode**: Speaks concisely without project prefixes for single-workspace tasks.
 
 ## Optional: voice feedback rule
 

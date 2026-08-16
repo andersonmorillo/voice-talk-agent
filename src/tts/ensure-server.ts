@@ -43,6 +43,7 @@ async function trySpawn(settings: PocketTtsSettings): Promise<ChildProcess> {
   ];
 
   const attempts: Array<{ command: string; args: string[] }> = [
+    { command: "uv", args: ["tool", "run", "pocket-tts", ...args] },
     { command: "uvx", args: ["pocket-tts", ...args] },
     { command: "pocket-tts", args },
   ];
