@@ -31,6 +31,7 @@ function publicConfig(config: Config) {
     voiceId: config.voiceId,
     model: config.model,
     voiceSettings: config.voiceSettings,
+    volume: config.volume ?? 1.0,
     autoSubmit: config.autoSubmit,
     wisprLoop: config.wisprLoop,
     autoListen: config.autoListen,
@@ -51,6 +52,7 @@ app.post("/api/config", (req, res) => {
     voiceId,
     model,
     voiceSettings,
+    volume,
     autoSubmit,
     wisprLoop,
     autoListen,
@@ -63,6 +65,7 @@ app.post("/api/config", (req, res) => {
   if (voiceId !== undefined) updates.voiceId = voiceId;
   if (model !== undefined) updates.model = model;
   if (voiceSettings !== undefined) updates.voiceSettings = voiceSettings;
+  if (volume !== undefined) updates.volume = typeof volume === "number" ? volume : parseFloat(volume);
   if (autoSubmit !== undefined) updates.autoSubmit = autoSubmit;
   if (wisprLoop !== undefined) updates.wisprLoop = wisprLoop;
   if (autoListen !== undefined) updates.autoListen = autoListen;
@@ -115,6 +118,7 @@ app.post("/api/test", async (req, res) => {
       const testConfig = {
         ...config,
         ttsProvider: "pocket-tts" as const,
+        volume: req.body.volume !== undefined ? parseFloat(req.body.volume) : config.volume,
         pocketTts: {
           ...config.pocketTts,
           ...(req.body.pocketTts || {}),

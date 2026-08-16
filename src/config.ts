@@ -44,6 +44,7 @@ export interface Config {
   voiceId: string;
   model: string;
   voiceSettings: VoiceSettings;
+  volume: number;       // 0.0 - 2.0+ (default 1.0 = 100%)
   autoSubmit: AutoSubmitSettings;
   wisprLoop: WisprLoopSettings;
   autoListen: boolean; // automatically call listen() after task completion
@@ -88,6 +89,7 @@ const DEFAULT_CONFIG: Config = {
   voiceId: "21m00Tcm4TlvDq8ikWAM",
   model: "eleven_flash_v2_5",
   voiceSettings: { ...DEFAULT_VOICE_SETTINGS },
+  volume: 1.0,
   autoSubmit: { ...DEFAULT_AUTO_SUBMIT },
   wisprLoop: { ...DEFAULT_WISPR_LOOP },
   autoListen: true,
@@ -104,6 +106,7 @@ function mergeConfig(parsed: Partial<Config> = {}): Config {
   return {
     ...DEFAULT_CONFIG,
     ...parsed,
+    volume: typeof parsed.volume === "number" && !isNaN(parsed.volume) ? parsed.volume : DEFAULT_CONFIG.volume,
     ttsProvider: parseProvider(parsed.ttsProvider ?? DEFAULT_CONFIG.ttsProvider),
     pocketTts: {
       ...DEFAULT_POCKET_TTS,
@@ -142,6 +145,7 @@ export function saveConfig(config: Partial<Config>): Config {
   const updated = mergeConfig({
     ...current,
     ...config,
+    volume: config.volume !== undefined ? config.volume : current.volume,
     pocketTts: {
       ...current.pocketTts,
       ...(config.pocketTts || {}),
@@ -171,6 +175,8 @@ export function getEffectiveConfig(): Config {
     voice: process.env.POCKET_TTS_VOICE || fileConfig.pocketTts.voice,
   };
 
+  const envVolume = process.env.TTS_VOLUME ? parseFloat(process.env.TTS_VOLUME) : undefined;
+
   return {
     ...fileConfig,
     ttsProvider: parseProvider(process.env.TTS_PROVIDER || fileConfig.ttsProvider),
@@ -178,5 +184,6 @@ export function getEffectiveConfig(): Config {
     apiKey: process.env.ELEVENLABS_API_KEY || fileConfig.apiKey,
     voiceId: process.env.ELEVENLABS_VOICE_ID || fileConfig.voiceId,
     model: fileConfig.model || DEFAULT_CONFIG.model,
+    volume: envVolume !== undefined && !isNaN(envVolume) ? envVolume : fileConfig.volume,
   };
 }

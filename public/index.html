@@ -770,6 +770,20 @@
         <div class="help-text">Restart the Pocket TTS server after changing language so the matching model is loaded.</div>
       </div>
 
+      <div class="slider-group" style="margin-bottom: 20px;">
+        <div class="slider-label">
+          <label for="pocketVolume">Volume Level</label>
+          <span class="slider-value" id="pocketVolumeValue">100%</span>
+        </div>
+        <input type="range" id="pocketVolume" min="0.5" max="2.0" step="0.05" value="1.0">
+        <div class="slider-range-labels">
+          <span>50%</span>
+          <span>100% (Normal)</span>
+          <span>200% (Boosted)</span>
+        </div>
+        <div class="help-text">Controls playback volume and digital audio boost. 100% is standard.</div>
+      </div>
+
       <div class="toggle-row">
         <div class="toggle-info">
           <span class="toggle-title">Auto-start server</span>
@@ -1204,6 +1218,8 @@
     const pocketVoiceSelect = document.getElementById('pocketVoice');
     const pocketLanguageSelect = document.getElementById('pocketLanguage');
     const pocketAutoStart = document.getElementById('pocketAutoStart');
+    const pocketVolumeSlider = document.getElementById('pocketVolume');
+    const pocketVolumeValue = document.getElementById('pocketVolumeValue');
     const savePocketBtn = document.getElementById('savePocketBtn');
     const testPocketBtn = document.getElementById('testPocketBtn');
     const startPocketBtn = document.getElementById('startPocketBtn');
@@ -1304,6 +1320,10 @@
       }
     });
 
+    pocketVolumeSlider.addEventListener('input', () => {
+      pocketVolumeValue.textContent = Math.round(parseFloat(pocketVolumeSlider.value) * 100) + '%';
+    });
+
     savePocketBtn.addEventListener('click', async () => {
       savePocketBtn.disabled = true;
       savePocketBtn.innerHTML = '<span class="spinner"></span> Saving...';
@@ -1313,6 +1333,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ttsProvider: 'pocket-tts',
+            volume: parseFloat(pocketVolumeSlider.value),
             pocketTts: {
               voice: pocketVoiceSelect.value,
               language: pocketLanguageSelect.value,
@@ -1341,6 +1362,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ttsProvider: 'pocket-tts',
+            volume: parseFloat(pocketVolumeSlider.value),
             pocketTts: {
               voice: pocketVoiceSelect.value,
               language: pocketLanguageSelect.value,
@@ -1478,6 +1500,10 @@
         if (data.pocketTts) {
           pocketLanguageSelect.value = data.pocketTts.language || 'english';
           pocketAutoStart.checked = data.pocketTts.autoStart !== false;
+        }
+        if (data.volume !== undefined) {
+          pocketVolumeSlider.value = data.volume;
+          pocketVolumeValue.textContent = Math.round(data.volume * 100) + '%';
         }
         refreshPocketStatus();
 

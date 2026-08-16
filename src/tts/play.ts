@@ -59,12 +59,39 @@ async function playWithPowerShell(filePath: string): Promise<void> {
 }
 
 /**
+ * Applies digital volume gain to 16-bit PCM WAV audio.
+ * Multiplier: 1.0 = 100%, 1.5 = 150%, 2.0 = 200%, etc.
+ */
+export function applyVolumeGain(buffer: Buffer, volume = 1.0): Buffer {
+  if (volume === 1.0 || volume <= 0) {
+    return buffer;
+  }
+
+  const out = Buffer.from(buffer);
+  const dataTag = Buffer.from("data");
+  const dataIndex = out.indexOf(dataTag);
+  if (dataIndex === -1 || dataIndex + 8 > out.length) {
+    return out;
+  }
+
+  const startOffset = dataIndex + 8;
+  for (let i = startOffset; i + 1 < out.length; i += 2) {
+    const sample = out.readInt16LE(i);
+    const amplified = Math.max(-32768, Math.min(32767, Math.round(sample * volume)));
+    out.writeInt16LE(amplified, i);
+  }
+
+  return out;
+}
+
+/**
  * Play a WAV buffer and wait until playback finishes.
  * Prefers mpv (same as the ElevenLabs SDK), then ffplay, then Windows SoundPlayer.
  */
-export async function playWav(buffer: Buffer): Promise<void> {
+export async function playWav(buffer: Buffer, volume = 1.0): Promise<void> {
+  const processedBuffer = volume !== 1.0 ? applyVolumeGain(buffer, volume) : buffer;
   const filePath = join(tmpdir(), `talk-to-cursor-${randomBytes(8).toString("hex")}.wav`);
-  await writeFile(filePath, buffer);
+  await writeFile(filePath, processedBuffer);
 
   const errors: string[] = [];
   try {
