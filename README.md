@@ -57,7 +57,7 @@ Fully quit Cursor and reopen it so the MCP server loads.
 
 ## First speech
 
-Pocket TTS auto-starts when the agent speaks (`pocketTts.autoStart` is true by default). The first run downloads model weights and can take a few minutes.
+Pocket TTS auto-starts when the agent speaks (`pocketTts.autoStart` is true by default). The first run downloads model weights and can take a few minutes. It listens on port `18741` by default (not `8000`). If that port is taken, the next free port is used and saved to `config.json`.
 
 To start the server yourself:
 
@@ -71,7 +71,7 @@ Optional settings UI:
 npm run settings
 ```
 
-Open [http://localhost:3847](http://localhost:3847), confirm **Pocket TTS**, pick a voice, and click **Test Speak**.
+Open [http://localhost:3847](http://localhost:3847), confirm **Pocket TTS**, pick a voice, and click **Test Speak**. If 3847 is already taken, the terminal prints the free port it chose instead.
 
 Spanish voices: use catalog voice `lola` and language `spanish_24l` in the settings UI or `config.json`.
 
@@ -140,7 +140,7 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `ttsProvider` | `pocket-tts` or `elevenlabs` | `pocket-tts` |
-| `pocketTts.baseUrl` | Local Pocket TTS server | `http://127.0.0.1:8000` |
+| `pocketTts.baseUrl` | Local Pocket TTS server | `http://127.0.0.1:18741` |
 | `pocketTts.voice` | Catalog voice | `alba` |
 | `pocketTts.language` | Language model | `english` |
 | `pocketTts.autoStart` | Spawn the server if it is down | `true` |
@@ -152,8 +152,8 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 | Command | Description |
 |---------|-------------|
 | `npm run build` | Compile TypeScript |
-| `npm run settings` | Settings UI on port 3847 |
-| `npm run pocket-tts` | Start the local Pocket TTS server |
+| `npm run settings` | Settings UI (port 3847, or the next free port) |
+| `npm run pocket-tts` | Start the local Pocket TTS server (port 18741, or the next free port) |
 | `npm run auto-submit` | Auto-submit + voice loop (macOS) |
 
 ## Troubleshooting
@@ -169,6 +169,7 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 - Run `npm run pocket-tts` and wait for the first model download.
 - Install [uv](https://docs.astral.sh/uv/) so `uvx pocket-tts serve` works.
 - Use **Test Speak** in the settings UI.
+- The TTS server prefers port `18741` instead of the usual `8000`. If that port is busy, it moves to the next free port and stores it in `config.json`.
 
 **No audio**
 

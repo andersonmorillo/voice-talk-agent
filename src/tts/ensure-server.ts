@@ -1,22 +1,136 @@
 import { spawn, type ChildProcess } from "child_process";
-import type { PocketTtsSettings } from "../config.js";
+import { loadConfig, saveConfig, type PocketTtsSettings } from "../config.js";
+import {
+  buildBaseUrl,
+  DEFAULT_POCKET_TTS_PORT,
+  findAvailablePort,
+  isPortAvailable,
+  LEGACY_POCKET_TTS_PORT,
+  parseListenAddress,
+} from "../ports.js";
 import { isPocketTtsHealthy, normalizeBaseUrl } from "./pocket-tts.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const POLL_INTERVAL_MS = 1_000;
+const OCCUPIED_HEALTH_TIMEOUT_MS = 400;
+const BIND_RETRY_LIMIT = 5;
 
 let sidecar: ChildProcess | null = null;
 
-function parseListenAddress(baseUrl: string): { host: string; port: string } {
-  try {
-    const url = new URL(normalizeBaseUrl(baseUrl));
+export interface PocketTtsListenTarget {
+  host: string;
+  port: number;
+  baseUrl: string;
+  alreadyRunning: boolean;
+}
+
+export function pocketTtsServeAttempts(
+  host: string,
+  port: number,
+  language: string
+): Array<{ command: string; args: string[] }> {
+  const args = [
+    "serve",
+    "--host",
+    host,
+    "--port",
+    String(port),
+    "--language",
+    language || "english",
+  ];
+  return [
+    { command: "uv", args: ["tool", "run", "pocket-tts", ...args] },
+    { command: "uvx", args: ["pocket-tts", ...args] },
+    { command: "pocket-tts", args },
+  ];
+}
+
+export async function resolvePocketTtsListenTarget(
+  settings: PocketTtsSettings
+): Promise<PocketTtsListenTarget> {
+  const configured = parseListenAddress(settings.baseUrl, DEFAULT_POCKET_TTS_PORT);
+  const fromEnv = Boolean(process.env.POCKET_TTS_URL);
+  const preferredPort =
+    !fromEnv && configured.port === LEGACY_POCKET_TTS_PORT
+      ? DEFAULT_POCKET_TTS_PORT
+      : configured.port;
+
+  const configuredUrl = normalizeBaseUrl(settings.baseUrl);
+  if (await isPocketTtsHealthy(configuredUrl, OCCUPIED_HEALTH_TIMEOUT_MS)) {
     return {
-      host: url.hostname || "127.0.0.1",
-      port: url.port || "8000",
+      host: configured.host,
+      port: configured.port,
+      baseUrl: configuredUrl,
+      alreadyRunning: true,
     };
-  } catch {
-    return { host: "127.0.0.1", port: "8000" };
   }
+
+  const defaultUrl = buildBaseUrl(configured.host, DEFAULT_POCKET_TTS_PORT);
+  if (
+    preferredPort !== configured.port &&
+    (await isPocketTtsHealthy(defaultUrl, OCCUPIED_HEALTH_TIMEOUT_MS))
+  ) {
+    return {
+      host: configured.host,
+      port: DEFAULT_POCKET_TTS_PORT,
+      baseUrl: defaultUrl,
+      alreadyRunning: true,
+    };
+  }
+
+  for (let i = 0; i < 30; i++) {
+    const port = preferredPort + i;
+    if (port > 65535) {
+      break;
+    }
+    const baseUrl = buildBaseUrl(configured.host, port);
+    if (await isPortAvailable(port, configured.host)) {
+      return {
+        host: configured.host,
+        port,
+        baseUrl,
+        alreadyRunning: false,
+      };
+    }
+    if (await isPocketTtsHealthy(baseUrl, OCCUPIED_HEALTH_TIMEOUT_MS)) {
+      return {
+        host: configured.host,
+        port,
+        baseUrl,
+        alreadyRunning: true,
+      };
+    }
+    console.error(`[TTS] Port ${port} is in use; trying the next one`);
+  }
+
+  const port = await findAvailablePort(preferredPort, configured.host);
+  return {
+    host: configured.host,
+    port,
+    baseUrl: buildBaseUrl(configured.host, port),
+    alreadyRunning: false,
+  };
+}
+
+export function persistPocketTtsBaseUrl(baseUrl: string): void {
+  if (process.env.POCKET_TTS_URL) {
+    return;
+  }
+  const current = loadConfig();
+  if (current.pocketTts.baseUrl === baseUrl) {
+    return;
+  }
+  saveConfig({
+    pocketTts: {
+      ...current.pocketTts,
+      baseUrl,
+    },
+  });
+}
+
+function applyResolvedUrl(settings: PocketTtsSettings, baseUrl: string): void {
+  settings.baseUrl = baseUrl;
+  persistPocketTtsBaseUrl(baseUrl);
 }
 
 function spawnServe(command: string, args: string[]): ChildProcess {
@@ -31,22 +145,8 @@ function spawnServe(command: string, args: string[]): ChildProcess {
 }
 
 async function trySpawn(settings: PocketTtsSettings): Promise<ChildProcess> {
-  const { host, port } = parseListenAddress(settings.baseUrl);
-  const args = [
-    "serve",
-    "--host",
-    host,
-    "--port",
-    port,
-    "--language",
-    settings.language || "english",
-  ];
-
-  const attempts: Array<{ command: string; args: string[] }> = [
-    { command: "uv", args: ["tool", "run", "pocket-tts", ...args] },
-    { command: "uvx", args: ["pocket-tts", ...args] },
-    { command: "pocket-tts", args },
-  ];
+  const { host, port } = parseListenAddress(settings.baseUrl, DEFAULT_POCKET_TTS_PORT);
+  const attempts = pocketTtsServeAttempts(host, port, settings.language || "english");
 
   let lastError: unknown;
   for (const attempt of attempts) {
@@ -96,20 +196,52 @@ async function trySpawn(settings: PocketTtsSettings): Promise<ChildProcess> {
   );
 }
 
-export async function ensurePocketTtsServer(settings: PocketTtsSettings): Promise<void> {
-  if (await isPocketTtsHealthy(settings.baseUrl)) {
-    return;
+export async function ensurePocketTtsServer(settings: PocketTtsSettings): Promise<string> {
+  let target = await resolvePocketTtsListenTarget(settings);
+  applyResolvedUrl(settings, target.baseUrl);
+
+  if (target.alreadyRunning) {
+    return target.baseUrl;
   }
 
   if (!sidecar || sidecar.killed || sidecar.exitCode !== null) {
-    sidecar = await trySpawn(settings);
+    let lastError: unknown;
+    for (let attempt = 0; attempt < BIND_RETRY_LIMIT; attempt++) {
+      if (attempt > 0) {
+        const port = await findAvailablePort(target.port + 1, target.host);
+        target = {
+          host: target.host,
+          port,
+          baseUrl: buildBaseUrl(target.host, port),
+          alreadyRunning: false,
+        };
+        applyResolvedUrl(settings, target.baseUrl);
+        console.error(`[TTS] Retrying Pocket TTS on ${target.baseUrl}`);
+      }
+      try {
+        sidecar = await trySpawn({ ...settings, baseUrl: target.baseUrl });
+        lastError = undefined;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!sidecar || sidecar.killed || sidecar.exitCode !== null) {
+      const detail = lastError instanceof Error ? lastError.message : String(lastError);
+      throw new Error(detail);
+    }
   }
 
   const startedAt = Date.now();
   while (Date.now() - startedAt < STARTUP_TIMEOUT_MS) {
     if (await isPocketTtsHealthy(settings.baseUrl, 1500)) {
-      console.error("[TTS] Pocket TTS server is ready");
-      return;
+      console.error(`[TTS] Pocket TTS server is ready at ${settings.baseUrl}`);
+      return settings.baseUrl;
+    }
+    if (sidecar.killed || sidecar.exitCode !== null) {
+      throw new Error(
+        `Pocket TTS exited before becoming ready at ${settings.baseUrl} (code ${sidecar.exitCode}).`
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
