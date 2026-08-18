@@ -15,7 +15,7 @@
     "similarityBoost": 0.75,
     "style": 0.0
   },
-  "volume": 1.0,
+  "volume": 2.0,
   "autoSubmit": {
     "enabled": false,
     "silenceDelay": 3.0,
