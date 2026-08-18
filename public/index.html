@@ -1293,9 +1293,9 @@
       try {
         const res = await fetch('/api/pocket-tts/status');
         const data = await res.json();
-        setPocketStatus(!!data.running, data.baseUrl || 'http://127.0.0.1:8000');
+        setPocketStatus(!!data.running, data.baseUrl || 'http://127.0.0.1:18741');
       } catch (error) {
-        setPocketStatus(false, 'http://127.0.0.1:8000');
+        setPocketStatus(false, 'http://127.0.0.1:18741');
       }
     }
 

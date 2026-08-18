@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { buildBaseUrl, DEFAULT_LISTEN_HOST, DEFAULT_POCKET_TTS_PORT } from "./ports.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,7 +77,7 @@ const DEFAULT_WISPR_LOOP: WisprLoopSettings = {
 };
 
 export const DEFAULT_POCKET_TTS: PocketTtsSettings = {
-  baseUrl: "http://127.0.0.1:8000",
+  baseUrl: buildBaseUrl(DEFAULT_LISTEN_HOST, DEFAULT_POCKET_TTS_PORT),
   voice: "alba",
   language: "english",
   autoStart: true,

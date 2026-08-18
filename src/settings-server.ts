@@ -4,6 +4,7 @@ import express from "express";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { loadConfig, saveConfig, type Config, type TtsProvider } from "./config.js";
+import { DEFAULT_SETTINGS_PORT, listenOnAvailablePort } from "./ports.js";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
   ensurePocketTtsServer,
@@ -96,11 +97,12 @@ app.get("/api/pocket-tts/status", async (_req, res) => {
 app.post("/api/pocket-tts/start", async (_req, res) => {
   const config = loadConfig();
   try {
-    await ensurePocketTtsServer(config.pocketTts);
+    const baseUrl = await ensurePocketTtsServer(config.pocketTts);
     res.json({
       success: true,
       running: true,
-      message: `Pocket TTS is running at ${config.pocketTts.baseUrl}`,
+      baseUrl,
+      message: `Pocket TTS is running at ${baseUrl}`,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -196,10 +198,23 @@ function maskKey(key: string): string {
   return key.slice(0, 4) + "****" + key.slice(-4);
 }
 
-const PORT = parseInt(process.env.PORT || "3847", 10);
+async function main(): Promise<void> {
+  const requestedPort = parseInt(process.env.PORT || String(DEFAULT_SETTINGS_PORT), 10);
+  const { port } = await listenOnAvailablePort(
+    (listenPort, callback) => app.listen(listenPort, callback),
+    requestedPort
+  );
 
-app.listen(PORT, () => {
   console.log(`\n  Cursor TTS Settings UI`);
   console.log(`  ───────────────────────`);
-  console.log(`  Open http://localhost:${PORT} in your browser\n`);
+  if (Number.isFinite(requestedPort) && port !== requestedPort) {
+    console.log(`  Port ${requestedPort} is in use; using ${port} instead`);
+  }
+  console.log(`  Open http://localhost:${port} in your browser\n`);
+}
+
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Failed to start settings UI: ${message}`);
+  process.exit(1);
 });

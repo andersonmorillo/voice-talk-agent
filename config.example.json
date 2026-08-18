@@ -1,7 +1,7 @@
 {
   "ttsProvider": "pocket-tts",
   "pocketTts": {
-    "baseUrl": "http://127.0.0.1:8000",
+    "baseUrl": "http://127.0.0.1:18741",
     "voice": "alba",
     "language": "english",
     "autoStart": true
