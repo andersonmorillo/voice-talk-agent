@@ -1,4 +1,6 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { loadConfig, saveConfig, type PocketTtsSettings } from "../config.js";
 import {
   buildBaseUrl,
@@ -14,6 +16,9 @@ const STARTUP_TIMEOUT_MS = 180_000;
 const POLL_INTERVAL_MS = 1_000;
 const OCCUPIED_HEALTH_TIMEOUT_MS = 400;
 const BIND_RETRY_LIMIT = 5;
+
+/** talk-to-cursor repo root, not the Cursor workspace that launched the MCP. */
+export const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let sidecar: ChildProcess | null = null;
 
@@ -39,10 +44,29 @@ export function pocketTtsServeAttempts(
     language || "english",
   ];
   return [
-    { command: "uv", args: ["tool", "run", "pocket-tts", ...args] },
-    { command: "uvx", args: ["pocket-tts", ...args] },
+    // Prefer a user-level install so other Cursor projects do not run uvx
+    // (and download packages) in that project's folder.
     { command: "pocket-tts", args },
+    { command: "uv", args: ["tool", "run", "--from", "pocket-tts", "pocket-tts", ...args] },
+    { command: "uvx", args: ["--from", "pocket-tts", "pocket-tts", ...args] },
   ];
+}
+
+export function pocketTtsSpawnOptions(
+  stdio: SpawnOptions["stdio"],
+  extra: Pick<SpawnOptions, "detached" | "windowsHide"> = {}
+): SpawnOptions {
+  return {
+    cwd: PACKAGE_ROOT,
+    env: {
+      ...process.env,
+      UV_NO_PROJECT: "1",
+    },
+    stdio,
+    shell: process.platform === "win32",
+    windowsHide: extra.windowsHide ?? true,
+    detached: extra.detached,
+  };
 }
 
 export async function resolvePocketTtsListenTarget(
@@ -134,12 +158,11 @@ function applyResolvedUrl(settings: PocketTtsSettings, baseUrl: string): void {
 }
 
 function spawnServe(command: string, args: string[]): ChildProcess {
-  const child = spawn(command, args, {
-    stdio: "ignore",
-    detached: true,
-    shell: process.platform === "win32",
-    windowsHide: true,
-  });
+  const child = spawn(
+    command,
+    args,
+    pocketTtsSpawnOptions("ignore", { detached: true, windowsHide: true })
+  );
   child.unref();
   return child;
 }

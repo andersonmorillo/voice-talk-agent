@@ -55,9 +55,19 @@ Replace the path with the real location of this project:
 
 Fully quit Cursor and reopen it so the MCP server loads.
 
+Do **not** copy this repo into other Cursor projects or run `npx` / `npm install` from those workspaces. One global `mcp.json` entry is enough: every project shares the same MCP process and the same Pocket TTS server.
+
 ## First speech
 
-Pocket TTS auto-starts when the agent speaks (`pocketTts.autoStart` is true by default). The first run downloads model weights and can take a few minutes. It listens on port `18741` by default (not `8000`). If that port is taken, the next free port is used and saved to `config.json`.
+Install Pocket TTS once in your user tool dir so other projects never download it:
+
+```bash
+uv tool install pocket-tts
+```
+
+Pocket TTS auto-starts when the agent speaks (`pocketTts.autoStart` is true by default). The first run downloads model weights and can take a few minutes. Later projects reuse that install and, if the server is already up, they only call it over HTTP — no terminal, no extra package download.
+
+It listens on port `18741` by default (not `8000`). If that port is taken, the next free port is used and saved to `config.json`.
 
 To start the server yourself:
 
@@ -154,6 +164,7 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 | `npm run build` | Compile TypeScript |
 | `npm run settings` | Settings UI (port 3847, or the next free port) |
 | `npm run pocket-tts` | Start the local Pocket TTS server (port 18741, or the next free port) |
+| `npm run install-tts` | Install Pocket TTS once with uv (`uv tool install pocket-tts`) |
 | `npm run auto-submit` | Auto-submit + voice loop (macOS) |
 
 ## Troubleshooting
@@ -167,7 +178,7 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 **Pocket TTS not speaking**
 
 - Run `npm run pocket-tts` and wait for the first model download.
-- Install [uv](https://docs.astral.sh/uv/) so `uvx pocket-tts serve` works.
+- Install [uv](https://docs.astral.sh/uv/) and run `uv tool install pocket-tts` once so other projects do not download it again.
 - Use **Test Speak** in the settings UI.
 - The TTS server prefers port `18741` instead of the usual `8000`. If that port is busy, it moves to the next free port and stores it in `config.json`.
 

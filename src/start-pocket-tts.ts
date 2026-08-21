@@ -5,6 +5,7 @@ import { getEffectiveConfig } from "./config.js";
 import {
   persistPocketTtsBaseUrl,
   pocketTtsServeAttempts,
+  pocketTtsSpawnOptions,
   resolvePocketTtsListenTarget,
 } from "./tts/ensure-server.js";
 
@@ -46,11 +47,11 @@ async function spawnForeground(
 
   for (const attempt of attempts) {
     try {
-      const child = spawn(attempt.command, attempt.args, {
-        stdio: "inherit",
-        shell: process.platform === "win32",
-        windowsHide: false,
-      });
+      const child = spawn(
+        attempt.command,
+        attempt.args,
+        pocketTtsSpawnOptions("inherit", { windowsHide: false })
+      );
       await waitForSpawn(child, attempt.command);
       return child;
     } catch (error) {

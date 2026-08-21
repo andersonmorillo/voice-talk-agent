@@ -12,6 +12,7 @@
     "watch": "tsc --watch",
     "settings": "node build/settings-server.js",
     "pocket-tts": "node build/start-pocket-tts.js",
+    "install-tts": "uv tool install pocket-tts",
     "auto-submit": "python scripts/auto-submit.py",
     "prepublishOnly": "npm run build"
   },
