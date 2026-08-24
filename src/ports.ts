@@ -3,6 +3,7 @@ import type { Server as HttpServer } from "http";
 
 /** Avoids 8000 (uvicorn/FastAPI), 8080, 3000, 5000, and 5173. */
 export const DEFAULT_POCKET_TTS_PORT = 18741;
+export const DEFAULT_SPANISH_POCKET_TTS_PORT = 18742;
 export const LEGACY_POCKET_TTS_PORT = 8000;
 
 /** Preferred settings UI port. Falls back to the next free port if busy. */

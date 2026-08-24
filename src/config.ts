@@ -1,7 +1,13 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { buildBaseUrl, DEFAULT_LISTEN_HOST, DEFAULT_POCKET_TTS_PORT } from "./ports.js";
+import {
+  buildBaseUrl,
+  DEFAULT_LISTEN_HOST,
+  DEFAULT_POCKET_TTS_PORT,
+  DEFAULT_SPANISH_POCKET_TTS_PORT,
+} from "./ports.js";
+import { normalizeSpeechLanguage, type SpeechLanguageMode } from "./tts/language.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,11 +37,21 @@ export interface WisprLoopSettings {
   manualTriggerHotkey: string; // hotkey to manually start the loop (default "ctrl+shift+l")
 }
 
+export interface PocketTtsLanguageProfile {
+  baseUrl: string;
+  voice: string;
+  language: string;
+}
+
 export interface PocketTtsSettings {
   baseUrl: string;
   voice: string;
   language: string;
   autoStart: boolean;
+  /** auto = detect from spoken text; otherwise lock to one language. */
+  speechLanguage: SpeechLanguageMode;
+  english: PocketTtsLanguageProfile;
+  spanish: PocketTtsLanguageProfile;
 }
 
 export interface Config {
@@ -76,16 +92,31 @@ const DEFAULT_WISPR_LOOP: WisprLoopSettings = {
   manualTriggerHotkey: "ctrl+shift+l",
 };
 
-export const DEFAULT_POCKET_TTS: PocketTtsSettings = {
+export const DEFAULT_ENGLISH_PROFILE: PocketTtsLanguageProfile = {
   baseUrl: buildBaseUrl(DEFAULT_LISTEN_HOST, DEFAULT_POCKET_TTS_PORT),
   voice: "alba",
   language: "english",
+};
+
+export const DEFAULT_SPANISH_PROFILE: PocketTtsLanguageProfile = {
+  baseUrl: buildBaseUrl(DEFAULT_LISTEN_HOST, DEFAULT_SPANISH_POCKET_TTS_PORT),
+  voice: "lola",
+  language: "spanish_24l",
+};
+
+export const DEFAULT_POCKET_TTS: PocketTtsSettings = {
+  baseUrl: DEFAULT_ENGLISH_PROFILE.baseUrl,
+  voice: DEFAULT_ENGLISH_PROFILE.voice,
+  language: DEFAULT_ENGLISH_PROFILE.language,
   autoStart: true,
+  speechLanguage: "auto",
+  english: { ...DEFAULT_ENGLISH_PROFILE },
+  spanish: { ...DEFAULT_SPANISH_PROFILE },
 };
 
 const DEFAULT_CONFIG: Config = {
   ttsProvider: "pocket-tts",
-  pocketTts: { ...DEFAULT_POCKET_TTS },
+  pocketTts: { ...DEFAULT_POCKET_TTS, english: { ...DEFAULT_ENGLISH_PROFILE }, spanish: { ...DEFAULT_SPANISH_PROFILE } },
   apiKey: "",
   voiceId: "21m00Tcm4TlvDq8ikWAM",
   model: "eleven_flash_v2_5",
@@ -103,16 +134,39 @@ function parseProvider(value: unknown): TtsProvider {
   return "pocket-tts";
 }
 
+function mergeProfile(
+  defaults: PocketTtsLanguageProfile,
+  parsed?: Partial<PocketTtsLanguageProfile>
+): PocketTtsLanguageProfile {
+  return {
+    ...defaults,
+    ...(parsed || {}),
+  };
+}
+
+export function mergePocketTts(parsed?: Partial<PocketTtsSettings>): PocketTtsSettings {
+  const english = mergeProfile(DEFAULT_ENGLISH_PROFILE, parsed?.english);
+  const spanish = mergeProfile(DEFAULT_SPANISH_PROFILE, parsed?.spanish);
+  return {
+    ...DEFAULT_POCKET_TTS,
+    ...(parsed || {}),
+    speechLanguage: normalizeSpeechLanguage(parsed?.speechLanguage ?? DEFAULT_POCKET_TTS.speechLanguage),
+    english,
+    spanish,
+    baseUrl: parsed?.baseUrl || english.baseUrl,
+    voice: parsed?.voice || english.voice,
+    language: parsed?.language || english.language,
+    autoStart: parsed?.autoStart !== undefined ? parsed.autoStart : DEFAULT_POCKET_TTS.autoStart,
+  };
+}
+
 function mergeConfig(parsed: Partial<Config> = {}): Config {
   return {
     ...DEFAULT_CONFIG,
     ...parsed,
     volume: typeof parsed.volume === "number" && !isNaN(parsed.volume) ? parsed.volume : DEFAULT_CONFIG.volume,
     ttsProvider: parseProvider(parsed.ttsProvider ?? DEFAULT_CONFIG.ttsProvider),
-    pocketTts: {
-      ...DEFAULT_POCKET_TTS,
-      ...(parsed.pocketTts || {}),
-    },
+    pocketTts: mergePocketTts(parsed.pocketTts),
     voiceSettings: {
       ...DEFAULT_VOICE_SETTINGS,
       ...(parsed.voiceSettings || {}),
@@ -147,10 +201,18 @@ export function saveConfig(config: Partial<Config>): Config {
     ...current,
     ...config,
     volume: config.volume !== undefined ? config.volume : current.volume,
-    pocketTts: {
+    pocketTts: mergePocketTts({
       ...current.pocketTts,
       ...(config.pocketTts || {}),
-    },
+      english: {
+        ...current.pocketTts.english,
+        ...(config.pocketTts?.english || {}),
+      },
+      spanish: {
+        ...current.pocketTts.spanish,
+        ...(config.pocketTts?.spanish || {}),
+      },
+    }),
     voiceSettings: {
       ...current.voiceSettings,
       ...(config.voiceSettings || {}),
@@ -168,20 +230,41 @@ export function saveConfig(config: Partial<Config>): Config {
   return updated;
 }
 
-export function getEffectiveConfig(): Config {
-  const fileConfig = loadConfig();
-  const pocketTts: PocketTtsSettings = {
-    ...fileConfig.pocketTts,
-    baseUrl: process.env.POCKET_TTS_URL || fileConfig.pocketTts.baseUrl,
-    voice: process.env.POCKET_TTS_VOICE || fileConfig.pocketTts.voice,
+function applyPocketTtsEnv(fileConfig: PocketTtsSettings): PocketTtsSettings {
+  const english: PocketTtsLanguageProfile = {
+    ...fileConfig.english,
+    baseUrl: process.env.POCKET_TTS_URL || fileConfig.english.baseUrl,
+    voice: process.env.POCKET_TTS_VOICE || fileConfig.english.voice,
+    language: process.env.POCKET_TTS_LANGUAGE || fileConfig.english.language,
+  };
+  const spanish: PocketTtsLanguageProfile = {
+    ...fileConfig.spanish,
+    baseUrl: process.env.POCKET_TTS_SPANISH_URL || fileConfig.spanish.baseUrl,
+    voice: process.env.POCKET_TTS_SPANISH_VOICE || fileConfig.spanish.voice,
+    language: process.env.POCKET_TTS_SPANISH_LANGUAGE || fileConfig.spanish.language,
   };
 
+  return mergePocketTts({
+    ...fileConfig,
+    speechLanguage: normalizeSpeechLanguage(
+      process.env.POCKET_TTS_SPEECH_LANGUAGE || fileConfig.speechLanguage
+    ),
+    english,
+    spanish,
+    baseUrl: english.baseUrl,
+    voice: english.voice,
+    language: english.language,
+  });
+}
+
+export function getEffectiveConfig(): Config {
+  const fileConfig = loadConfig();
   const envVolume = process.env.TTS_VOLUME ? parseFloat(process.env.TTS_VOLUME) : undefined;
 
   return {
     ...fileConfig,
     ttsProvider: parseProvider(process.env.TTS_PROVIDER || fileConfig.ttsProvider),
-    pocketTts,
+    pocketTts: applyPocketTtsEnv(fileConfig.pocketTts),
     apiKey: process.env.ELEVENLABS_API_KEY || fileConfig.apiKey,
     voiceId: process.env.ELEVENLABS_VOICE_ID || fileConfig.voiceId,
     model: fileConfig.model || DEFAULT_CONFIG.model,

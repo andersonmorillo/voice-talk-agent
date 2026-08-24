@@ -4,7 +4,18 @@
     "baseUrl": "http://127.0.0.1:18741",
     "voice": "alba",
     "language": "english",
-    "autoStart": true
+    "autoStart": true,
+    "speechLanguage": "auto",
+    "english": {
+      "baseUrl": "http://127.0.0.1:18741",
+      "voice": "alba",
+      "language": "english"
+    },
+    "spanish": {
+      "baseUrl": "http://127.0.0.1:18742",
+      "voice": "lola",
+      "language": "spanish_24l"
+    }
   },
   "apiKey": "",
   "voiceId": "21m00Tcm4TlvDq8ikWAM",

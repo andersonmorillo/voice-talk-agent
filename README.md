@@ -2,6 +2,8 @@
 
 A hands-free voice interface for Cursor AI. The coding assistant speaks progress updates, completions, and responses aloud using local [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (CPU, no API key) by default, with optional ElevenLabs cloud TTS.
 
+This repository is a derivative of [MindSyncTech/talk-to-cursor](https://github.com/MindSyncTech/talk-to-cursor) (Talk to Cursor by Mike Sheehan). See [License](#license). This fork adds local Pocket TTS and **Spanish + English** speech.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20 or newer
@@ -67,7 +69,7 @@ uv tool install pocket-tts
 
 Pocket TTS auto-starts when the agent speaks (`pocketTts.autoStart` is true by default). The first run downloads model weights and can take a few minutes. Later projects reuse that install and, if the server is already up, they only call it over HTTP — no terminal, no extra package download.
 
-It listens on port `18741` by default (not `8000`). If that port is taken, the next free port is used and saved to `config.json`.
+It listens on port `18741` for English and `18742` for Spanish by default. If a port is taken, the next free port is used and saved to `config.json`.
 
 To start the server yourself:
 
@@ -81,15 +83,42 @@ Optional settings UI:
 npm run settings
 ```
 
-Open [http://localhost:3847](http://localhost:3847), confirm **Pocket TTS**, pick a voice, and click **Test Speak**. If 3847 is already taken, the terminal prints the free port it chose instead.
+Open [http://localhost:3847](http://localhost:3847), confirm **Pocket TTS**, pick English and Spanish voices, and click **Test English** / **Test Spanish**. If 3847 is already taken, the terminal prints the free port it chose instead.
 
-Spanish voices: use catalog voice `lola` and language `spanish_24l` in the settings UI or `config.json`.
+## Spanish and English
+
+Pocket TTS loads **one language model per server**, so this fork runs two local servers:
+
+| Language | Voice | Model | Port |
+|----------|-------|-------|------|
+| English | `alba` | `english` | `18741` |
+| Spanish | `lola` | `spanish_24l` | `18742` |
+
+`pocketTts.speechLanguage` defaults to `auto`: the `speak` tool detects the language of the text and routes it to the matching server.
+
+Lock to one language in `config.json`, the settings UI, or the environment:
+
+```bash
+POCKET_TTS_SPEECH_LANGUAGE=auto     # default: detect from text
+# POCKET_TTS_SPEECH_LANGUAGE=english
+# POCKET_TTS_SPEECH_LANGUAGE=spanish
+POCKET_TTS_VOICE=alba
+POCKET_TTS_LANGUAGE=english
+POCKET_TTS_SPANISH_VOICE=lola
+POCKET_TTS_SPANISH_LANGUAGE=spanish_24l
+```
+
+The first time each language is used, Pocket TTS downloads that model. After that, English and Spanish can be mixed in the same session.
+
+Pass `language: "spanish"` or `language: "english"` to `speak` when you already know the language. The agent should speak in the same language the user is using.
+
+ElevenLabs also works in both languages if you keep a multilingual model such as `eleven_flash_v2_5` or `eleven_multilingual_v2`.
 
 ## Test it
 
 1. Open a new Cursor chat.
 2. Check that the `speak` tool appears under Available Tools.
-3. Type: **Say hello using the speak tool**.
+3. Type: **Say hello using the speak tool** or **Di hola usando la herramienta speak**.
 4. You should hear audio on your speakers.
 
 The MCP server also provides:
@@ -151,8 +180,10 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 |---------|-------------|---------|
 | `ttsProvider` | `pocket-tts` or `elevenlabs` | `pocket-tts` |
 | `pocketTts.baseUrl` | Local Pocket TTS server | `http://127.0.0.1:18741` |
-| `pocketTts.voice` | Catalog voice | `alba` |
-| `pocketTts.language` | Language model | `english` |
+| `pocketTts.speechLanguage` | `auto`, `english`, or `spanish` | `auto` |
+| `pocketTts.english.voice` | English catalog voice | `alba` |
+| `pocketTts.spanish.voice` | Spanish catalog voice | `lola` |
+| `pocketTts.spanish.language` | Spanish model | `spanish_24l` |
 | `pocketTts.autoStart` | Spawn the server if it is down | `true` |
 | `apiKey` | Optional ElevenLabs API key | (empty) |
 | `autoListen` | Auto-listen after tasks | `true` |
@@ -163,7 +194,7 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 |---------|-------------|
 | `npm run build` | Compile TypeScript |
 | `npm run settings` | Settings UI (port 3847, or the next free port) |
-| `npm run pocket-tts` | Start the local Pocket TTS server (port 18741, or the next free port) |
+| `npm run pocket-tts` | Start the local Pocket TTS server (English on 18741 by default) |
 | `npm run install-tts` | Install Pocket TTS once with uv (`uv tool install pocket-tts`) |
 | `npm run auto-submit` | Auto-submit + voice loop (macOS) |
 
@@ -180,7 +211,8 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 - Run `npm run pocket-tts` and wait for the first model download.
 - Install [uv](https://docs.astral.sh/uv/) and run `uv tool install pocket-tts` once so other projects do not download it again.
 - Use **Test Speak** in the settings UI.
-- The TTS server prefers port `18741` instead of the usual `8000`. If that port is busy, it moves to the next free port and stores it in `config.json`.
+- The English server prefers port `18741` and Spanish prefers `18742`. If a port is busy, it moves to the next free port and stores it in `config.json`.
+- If Spanish still sounds English, the English model is probably still bound to that port. Stop existing Pocket TTS processes and start again, or use **Start servers** in the settings UI.
 
 **No audio**
 
@@ -194,10 +226,20 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Original copyright retained.
+MIT — see [LICENSE](LICENSE).
+
+This project is a derivative of **[Talk to Cursor](https://github.com/MindSyncTech/talk-to-cursor)** by Mike Sheehan / [MindSyncTech](https://github.com/MindSyncTech), also published as [`talktocursor`](https://www.npmjs.com/package/talktocursor) and at [talktocursor.com](https://talktocursor.com/).
+
+The original MIT copyright is retained:
+
+- Copyright (c) 2026 Mike Sheehan
+- Copyright (c) 2026 andersonmorillo (modifications in this fork: local Pocket TTS, Spanish and English speech, and related changes)
+
+A copy of the original license text is included in [LICENSE](LICENSE).
 
 ## Credits
 
+- [MindSyncTech/talk-to-cursor](https://github.com/MindSyncTech/talk-to-cursor) — original Talk to Cursor project by Mike Sheehan
 - [Kyutai Pocket TTS](https://github.com/kyutai-labs/pocket-tts) for local CPU text-to-speech
 - [ElevenLabs](https://elevenlabs.io) for optional cloud TTS
 - [Model Context Protocol](https://modelcontextprotocol.io) for the MCP SDK

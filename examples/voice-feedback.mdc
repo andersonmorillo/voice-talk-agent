@@ -10,4 +10,4 @@ You MUST use the `speak` tool at these moments:
 - **Task Start**: Briefly announce what you're about to do
 - **Task Completion**: Summarize what was done
 
-Keep messages concise (1-2 sentences). Always speak at start and end of every task.
+Speak in the same language the user is using (Spanish or English). Keep messages concise (1-2 sentences). Always speak at start and end of every task.

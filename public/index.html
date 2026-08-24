@@ -181,6 +181,7 @@
 
     .btn-row {
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       margin-top: 24px;
     }
@@ -748,26 +749,27 @@
           <span class="status-dot" id="pocketStatusDot"></span>
           <span id="pocketStatusText">Checking local server...</span>
         </div>
-        <button class="btn-secondary" id="startPocketBtn" type="button" style="flex: none; width: auto;">Start server</button>
+        <button class="btn-secondary" id="startPocketBtn" type="button" style="flex: none; width: auto;">Start servers</button>
       </div>
 
       <div class="form-group">
-        <label for="pocketVoice">Voice</label>
-        <select id="pocketVoice"></select>
-      </div>
-
-      <div class="form-group">
-        <label for="pocketLanguage">Language</label>
-        <select id="pocketLanguage">
-          <option value="english">English</option>
-          <option value="english_2026-04">English (2026-04)</option>
-          <option value="spanish_24l">Spanish</option>
-          <option value="french_24l">French</option>
-          <option value="german_24l">German</option>
-          <option value="portuguese_24l">Portuguese</option>
-          <option value="italian_24l">Italian</option>
+        <label for="pocketSpeechLanguage">Speech language</label>
+        <select id="pocketSpeechLanguage">
+          <option value="auto">Auto-detect (Spanish and English)</option>
+          <option value="english">English only</option>
+          <option value="spanish">Spanish only</option>
         </select>
-        <div class="help-text">Restart the Pocket TTS server after changing language so the matching model is loaded.</div>
+        <div class="help-text">Pocket TTS loads one model per language. Auto-detect routes Spanish text to Lola (port 18742) and English text to Alba (port 18741).</div>
+      </div>
+
+      <div class="form-group">
+        <label for="pocketEnglishVoice">English voice</label>
+        <select id="pocketEnglishVoice"></select>
+      </div>
+
+      <div class="form-group">
+        <label for="pocketSpanishVoice">Spanish voice</label>
+        <select id="pocketSpanishVoice"></select>
       </div>
 
       <div class="slider-group" style="margin-bottom: 20px;">
@@ -796,7 +798,8 @@
       </div>
 
       <div class="btn-row" style="margin-top: 20px;">
-        <button class="btn-secondary" id="testPocketBtn" type="button">Test Speak</button>
+        <button class="btn-secondary" id="testEnglishBtn" type="button">Test English</button>
+        <button class="btn-secondary" id="testSpanishBtn" type="button">Test Spanish</button>
         <button class="btn-primary" id="savePocketBtn" type="button">Save Pocket TTS</button>
       </div>
     </div>
@@ -1215,13 +1218,15 @@
     const elevenlabsVoiceCard = document.getElementById('elevenlabsVoiceCard');
     const elevenlabsModelCard = document.getElementById('elevenlabsModelCard');
     const elevenlabsSettingsCard = document.getElementById('elevenlabsSettingsCard');
-    const pocketVoiceSelect = document.getElementById('pocketVoice');
-    const pocketLanguageSelect = document.getElementById('pocketLanguage');
+    const pocketSpeechLanguage = document.getElementById('pocketSpeechLanguage');
+    const pocketEnglishVoice = document.getElementById('pocketEnglishVoice');
+    const pocketSpanishVoice = document.getElementById('pocketSpanishVoice');
     const pocketAutoStart = document.getElementById('pocketAutoStart');
     const pocketVolumeSlider = document.getElementById('pocketVolume');
     const pocketVolumeValue = document.getElementById('pocketVolumeValue');
     const savePocketBtn = document.getElementById('savePocketBtn');
-    const testPocketBtn = document.getElementById('testPocketBtn');
+    const testEnglishBtn = document.getElementById('testEnglishBtn');
+    const testSpanishBtn = document.getElementById('testSpanishBtn');
     const startPocketBtn = document.getElementById('startPocketBtn');
     const pocketStatusBadge = document.getElementById('pocketStatusBadge');
     const pocketStatusDot = document.getElementById('pocketStatusDot');
@@ -1262,40 +1267,44 @@
     providerPocketBtn.addEventListener('click', () => setProvider('pocket-tts'));
     providerElevenBtn.addEventListener('click', () => setProvider('elevenlabs'));
 
-    async function loadPocketVoices(selected) {
+    function fillVoiceSelect(selectEl, voices, lang, selected, fallbackId, fallbackLabel) {
+      const filtered = (voices || []).filter((v) => v.language.toLowerCase() === lang);
+      const list = filtered.length ? filtered : (voices || []);
+      selectEl.innerHTML = list.map((v) =>
+        `<option value="${v.id}">${v.name} (${v.language})</option>`
+      ).join('') || `<option value="${fallbackId}">${fallbackLabel}</option>`;
+      if (selected) selectEl.value = selected;
+    }
+
+    async function loadPocketVoices(englishVoice, spanishVoice) {
       try {
         const res = await fetch('/api/pocket-tts/voices');
         const data = await res.json();
-        pocketVoiceSelect.innerHTML = (data.voices || []).map((v) =>
-          `<option value="${v.id}">${v.name} (${v.language})</option>`
-        ).join('');
-        if (selected) pocketVoiceSelect.value = selected;
+        fillVoiceSelect(pocketEnglishVoice, data.voices, 'english', englishVoice, 'alba', 'Alba (English)');
+        fillVoiceSelect(pocketSpanishVoice, data.voices, 'spanish', spanishVoice, 'lola', 'Lola (Spanish)');
       } catch (error) {
-        pocketVoiceSelect.innerHTML = '<option value="alba">Alba (English)</option>';
+        pocketEnglishVoice.innerHTML = '<option value="alba">Alba (English)</option>';
+        pocketSpanishVoice.innerHTML = '<option value="lola">Lola (Spanish)</option>';
       }
     }
 
-    function setPocketStatus(running, baseUrl) {
-      if (running) {
-        pocketStatusBadge.textContent = 'Running';
-        pocketStatusBadge.className = 'badge badge-set';
-        pocketStatusDot.className = 'status-dot up';
-        pocketStatusText.textContent = `Server ready at ${baseUrl}`;
-      } else {
-        pocketStatusBadge.textContent = 'Stopped';
-        pocketStatusBadge.className = 'badge badge-missing';
-        pocketStatusDot.className = 'status-dot down';
-        pocketStatusText.textContent = 'Local server is not running';
-      }
+    function setPocketStatus(data) {
+      const english = data && data.english ? data.english : { running: false, baseUrl: 'http://127.0.0.1:18741' };
+      const spanish = data && data.spanish ? data.spanish : { running: false, baseUrl: 'http://127.0.0.1:18742' };
+      const running = !!(english.running || spanish.running);
+      pocketStatusBadge.textContent = running ? 'Running' : 'Stopped';
+      pocketStatusBadge.className = running ? 'badge badge-set' : 'badge badge-missing';
+      pocketStatusDot.className = running ? 'status-dot up' : 'status-dot down';
+      pocketStatusText.textContent = `English ${english.running ? 'ready' : 'stopped'} at ${english.baseUrl} · Spanish ${spanish.running ? 'ready' : 'stopped'} at ${spanish.baseUrl}`;
     }
 
     async function refreshPocketStatus() {
       try {
         const res = await fetch('/api/pocket-tts/status');
         const data = await res.json();
-        setPocketStatus(!!data.running, data.baseUrl || 'http://127.0.0.1:18741');
+        setPocketStatus(data);
       } catch (error) {
-        setPocketStatus(false, 'http://127.0.0.1:18741');
+        setPocketStatus(null);
       }
     }
 
@@ -1303,10 +1312,13 @@
       startPocketBtn.disabled = true;
       startPocketBtn.innerHTML = '<span class="spinner"></span> Starting...';
       try {
-        const res = await fetch('/api/pocket-tts/start', { method: 'POST' });
+        const res = await fetch('/api/pocket-tts/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language: 'both' }),
+        });
         const data = await res.json();
         if (data.success) {
-          setPocketStatus(true, data.message);
           showToast(data.message, 'success');
         } else {
           showToast(data.error || 'Failed to start Pocket TTS', 'error');
@@ -1316,7 +1328,7 @@
         showToast('Failed to start Pocket TTS', 'error');
       } finally {
         startPocketBtn.disabled = false;
-        startPocketBtn.innerHTML = 'Start server';
+        startPocketBtn.innerHTML = 'Start servers';
       }
     });
 
@@ -1335,9 +1347,16 @@
             ttsProvider: 'pocket-tts',
             volume: parseFloat(pocketVolumeSlider.value),
             pocketTts: {
-              voice: pocketVoiceSelect.value,
-              language: pocketLanguageSelect.value,
+              speechLanguage: pocketSpeechLanguage.value,
               autoStart: pocketAutoStart.checked,
+              english: {
+                voice: pocketEnglishVoice.value,
+                language: 'english',
+              },
+              spanish: {
+                voice: pocketSpanishVoice.value,
+                language: 'spanish_24l',
+              },
             },
           }),
         });
@@ -1353,9 +1372,9 @@
       }
     });
 
-    testPocketBtn.addEventListener('click', async () => {
-      testPocketBtn.disabled = true;
-      testPocketBtn.innerHTML = '<span class="spinner"></span> Speaking...';
+    async function testPocketLanguage(language, button, label, text) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner"></span> Speaking...';
       try {
         const res = await fetch('/api/test', {
           method: 'POST',
@@ -1363,10 +1382,19 @@
           body: JSON.stringify({
             ttsProvider: 'pocket-tts',
             volume: parseFloat(pocketVolumeSlider.value),
+            language,
+            text,
             pocketTts: {
-              voice: pocketVoiceSelect.value,
-              language: pocketLanguageSelect.value,
+              speechLanguage: language,
               autoStart: true,
+              english: {
+                voice: pocketEnglishVoice.value,
+                language: 'english',
+              },
+              spanish: {
+                voice: pocketSpanishVoice.value,
+                language: 'spanish_24l',
+              },
             },
           }),
         });
@@ -1380,9 +1408,17 @@
       } catch (error) {
         showToast('Pocket TTS test failed', 'error');
       } finally {
-        testPocketBtn.disabled = false;
-        testPocketBtn.innerHTML = 'Test Speak';
+        button.disabled = false;
+        button.innerHTML = label;
       }
+    }
+
+    testEnglishBtn.addEventListener('click', () => {
+      testPocketLanguage('english', testEnglishBtn, 'Test English', 'Pocket TTS is working.');
+    });
+
+    testSpanishBtn.addEventListener('click', () => {
+      testPocketLanguage('spanish', testSpanishBtn, 'Test Spanish', 'Pocket TTS está funcionando.');
     });
 
     // Wire up slider value displays
@@ -1496,10 +1532,14 @@
         const data = await res.json();
 
         applyProviderVisibility(data.ttsProvider || 'pocket-tts');
-        await loadPocketVoices(data.pocketTts && data.pocketTts.voice);
+        const pocket = data.pocketTts || {};
+        await loadPocketVoices(
+          pocket.english && pocket.english.voice,
+          pocket.spanish && pocket.spanish.voice
+        );
         if (data.pocketTts) {
-          pocketLanguageSelect.value = data.pocketTts.language || 'english';
-          pocketAutoStart.checked = data.pocketTts.autoStart !== false;
+          pocketSpeechLanguage.value = pocket.speechLanguage || 'auto';
+          pocketAutoStart.checked = pocket.autoStart !== false;
         }
         if (data.volume !== undefined) {
           pocketVolumeSlider.value = data.volume;

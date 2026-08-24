@@ -3,7 +3,7 @@
 import express from "express";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { loadConfig, saveConfig, type Config, type TtsProvider } from "./config.js";
+import { loadConfig, saveConfig, mergePocketTts, type Config, type TtsProvider } from "./config.js";
 import { DEFAULT_SETTINGS_PORT, listenOnAvailablePort } from "./ports.js";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
@@ -11,6 +11,7 @@ import {
   isPocketTtsHealthy,
   POCKET_TTS_LANGUAGES,
   POCKET_TTS_VOICES,
+  pocketSettingsForSpeech,
   speak,
 } from "./tts/index.js";
 
@@ -87,22 +88,44 @@ app.get("/api/pocket-tts/voices", (_req, res) => {
 
 app.get("/api/pocket-tts/status", async (_req, res) => {
   const config = loadConfig();
-  const running = await isPocketTtsHealthy(config.pocketTts.baseUrl);
+  const englishUrl = config.pocketTts.english.baseUrl;
+  const spanishUrl = config.pocketTts.spanish.baseUrl;
+  const [english, spanish] = await Promise.all([
+    isPocketTtsHealthy(englishUrl),
+    isPocketTtsHealthy(spanishUrl),
+  ]);
   res.json({
-    running,
+    running: english || spanish,
     baseUrl: config.pocketTts.baseUrl,
+    english: { running: english, baseUrl: englishUrl },
+    spanish: { running: spanish, baseUrl: spanishUrl },
   });
 });
 
-app.post("/api/pocket-tts/start", async (_req, res) => {
+app.post("/api/pocket-tts/start", async (req, res) => {
   const config = loadConfig();
+  const requested = typeof req.body?.language === "string" ? req.body.language : "both";
   try {
-    const baseUrl = await ensurePocketTtsServer(config.pocketTts);
+    const started: Array<{ language: string; baseUrl: string }> = [];
+    const kinds = requested === "spanish"
+      ? (["spanish"] as const)
+      : requested === "english"
+        ? (["english"] as const)
+        : (["english", "spanish"] as const);
+
+    for (const kind of kinds) {
+      const sample = kind === "spanish" ? "Hola" : "Hello";
+      const { settings, skipPorts } = pocketSettingsForSpeech(config, sample, kind);
+      const baseUrl = await ensurePocketTtsServer(settings, { kind, skipPorts });
+      started.push({ language: kind, baseUrl });
+    }
+
     res.json({
       success: true,
       running: true,
-      baseUrl,
-      message: `Pocket TTS is running at ${baseUrl}`,
+      started,
+      baseUrl: started[0]?.baseUrl,
+      message: started.map((item) => `${item.language} at ${item.baseUrl}`).join("; "),
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -121,12 +144,24 @@ app.post("/api/test", async (req, res) => {
         ...config,
         ttsProvider: "pocket-tts" as const,
         volume: req.body.volume !== undefined ? parseFloat(req.body.volume) : config.volume,
-        pocketTts: {
+        pocketTts: mergePocketTts({
           ...config.pocketTts,
           ...(req.body.pocketTts || {}),
-        },
+          english: {
+            ...config.pocketTts.english,
+            ...(req.body.pocketTts?.english || {}),
+          },
+          spanish: {
+            ...config.pocketTts.spanish,
+            ...(req.body.pocketTts?.spanish || {}),
+          },
+        }),
       };
-      await speak(testConfig, req.body.text || "Pocket TTS is working.");
+      await speak(
+        testConfig,
+        req.body.text || (req.body.language === "spanish" ? "Pocket TTS está funcionando." : "Pocket TTS is working."),
+        req.body.language
+      );
       res.json({
         success: true,
         message: `Spoke using Pocket TTS voice "${testConfig.pocketTts.voice}".`,

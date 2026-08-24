@@ -1,6 +1,10 @@
 MIT License
 
 Copyright (c) 2026 Mike Sheehan
+Copyright (c) 2026 andersonmorillo (modifications)
+
+This software is a derivative of Talk to Cursor by Mike Sheehan / MindSyncTech:
+https://github.com/MindSyncTech/talk-to-cursor
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

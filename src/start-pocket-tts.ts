@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 import { spawn, type ChildProcess } from "child_process";
-import { getEffectiveConfig } from "./config.js";
+import { DEFAULT_POCKET_TTS, getEffectiveConfig } from "./config.js";
+import { parseListenAddress } from "./ports.js";
 import {
-  persistPocketTtsBaseUrl,
+  persistPocketTtsProfileUrl,
   pocketTtsServeAttempts,
   pocketTtsSpawnOptions,
   resolvePocketTtsListenTarget,
 } from "./tts/ensure-server.js";
+import { normalizeSpeechLanguage } from "./tts/language.js";
 
 async function waitForSpawn(child: ChildProcess, command: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -68,16 +70,27 @@ async function spawnForeground(
 
 async function main(): Promise<void> {
   const config = getEffectiveConfig();
-  const target = await resolvePocketTtsListenTarget(config.pocketTts);
-  persistPocketTtsBaseUrl(target.baseUrl);
+  const mode = normalizeSpeechLanguage(config.pocketTts.speechLanguage);
+  const kind = mode === "spanish" ? "spanish" : "english";
+  const profile = config.pocketTts[kind];
+  const other = kind === "spanish" ? config.pocketTts.english : config.pocketTts.spanish;
+  const skipPorts = [parseListenAddress(other.baseUrl).port];
+  const settings = {
+    ...config.pocketTts,
+    baseUrl: profile.baseUrl,
+    voice: profile.voice,
+    language: profile.language,
+  };
+  const target = await resolvePocketTtsListenTarget(settings, { skipPorts });
+  persistPocketTtsProfileUrl(kind, target.baseUrl);
 
   if (target.alreadyRunning) {
-    console.log(`Pocket TTS is already running at ${target.baseUrl}`);
+    console.log(`Pocket TTS (${kind}) is already running at ${target.baseUrl}`);
     return;
   }
 
-  console.log(`Starting Pocket TTS at ${target.baseUrl}`);
-  const child = await spawnForeground(target.host, target.port, config.pocketTts.language || "english");
+  console.log(`Starting Pocket TTS (${kind}) at ${target.baseUrl}`);
+  const child = await spawnForeground(target.host, target.port, settings.language || DEFAULT_POCKET_TTS.language);
 
   const shutdown = () => {
     if (!child.killed) {

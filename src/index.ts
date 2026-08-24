@@ -25,6 +25,7 @@ const server = new McpServer({
 // TTS queue to prevent overlapping audio
 interface TTSQueueItem {
   text: string;
+  language?: string;
   resolve: (value: any) => void;
   reject: (error: any) => void;
 }
@@ -43,9 +44,10 @@ async function processTTSQueue() {
     const item = ttsQueue.shift()!;
 
     try {
-      console.error(`[TTS] Speaking (${config.ttsProvider}): ${item.text}`);
+      const config = getEffectiveConfig();
+      console.error(`[TTS] Speaking (${config.ttsProvider}${item.language ? `/${item.language}` : ""}): ${item.text}`);
 
-      await speak(config, item.text);
+      await speak(config, item.text, item.language);
 
       // Write TTS completion signal for background script
       const completionPath = join(__dirname, "..", "tts-complete.json");
@@ -84,9 +86,9 @@ async function processTTSQueue() {
   isProcessingQueue = false;
 }
 
-function queueTTS(text: string): Promise<any> {
+function queueTTS(text: string, language?: string): Promise<any> {
   return new Promise((resolve, reject) => {
-    ttsQueue.push({ text, resolve, reject });
+    ttsQueue.push({ text, language, resolve, reject });
     processTTSQueue();
   });
 }
@@ -108,16 +110,20 @@ server.registerTool(
   "speak",
   {
     description:
-      "Speak text aloud using text-to-speech. Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
+      "Speak text aloud using text-to-speech. Write the announcement in the same language you want spoken (Spanish or English). Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
     inputSchema: {
       text: z
         .string()
-        .describe("The text to speak aloud. Keep it concise (1-2 sentences max)."),
+        .describe("The text to speak aloud. Keep it concise (1-2 sentences max). Use Spanish or English to match the user."),
+      language: z
+        .enum(["auto", "english", "spanish", "en", "es"])
+        .optional()
+        .describe("Language of the text. Omit or auto to detect from the text. Use spanish or english when you know it."),
     },
   },
-  async ({ text }) => {
+  async ({ text, language }) => {
     // Queue the TTS request to prevent overlapping audio
-    return await queueTTS(text);
+    return await queueTTS(text, language);
   }
 );
 
@@ -259,7 +265,11 @@ async function main() {
   console.error(`[TTS] Starting Cursor TTS MCP Server...`);
   console.error(`[TTS] Provider: ${config.ttsProvider}`);
   if (config.ttsProvider === "pocket-tts") {
-    console.error(`[TTS] Pocket TTS: ${config.pocketTts.baseUrl} voice=${config.pocketTts.voice} lang=${config.pocketTts.language}`);
+    console.error(
+      `[TTS] Pocket TTS speechLanguage=${config.pocketTts.speechLanguage} ` +
+        `en=${config.pocketTts.english.voice}@${config.pocketTts.english.baseUrl} ` +
+        `es=${config.pocketTts.spanish.voice}@${config.pocketTts.spanish.baseUrl}`
+    );
   } else {
     console.error(`[TTS] Voice ID: ${config.voiceId}`);
     console.error(`[TTS] Model: ${config.model}`);

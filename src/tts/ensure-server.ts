@@ -1,13 +1,13 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { loadConfig, saveConfig, type PocketTtsSettings } from "../config.js";
+import { DEFAULT_POCKET_TTS, loadConfig, saveConfig, type PocketTtsSettings } from "../config.js";
+import type { SpeechLanguage } from "./language.js";
 import {
   buildBaseUrl,
   DEFAULT_POCKET_TTS_PORT,
   findAvailablePort,
   isPortAvailable,
-  LEGACY_POCKET_TTS_PORT,
   parseListenAddress,
 } from "../ports.js";
 import { isPocketTtsHealthy, normalizeBaseUrl } from "./pocket-tts.js";
@@ -20,13 +20,18 @@ const BIND_RETRY_LIMIT = 5;
 /** talk-to-cursor repo root, not the Cursor workspace that launched the MCP. */
 export const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-let sidecar: ChildProcess | null = null;
+const sidecars = new Map<string, ChildProcess>();
 
 export interface PocketTtsListenTarget {
   host: string;
   port: number;
   baseUrl: string;
   alreadyRunning: boolean;
+}
+
+export interface EnsurePocketTtsOptions {
+  kind?: SpeechLanguage;
+  skipPorts?: number[];
 }
 
 export function pocketTtsServeAttempts(
@@ -41,7 +46,7 @@ export function pocketTtsServeAttempts(
     "--port",
     String(port),
     "--language",
-    language || "english",
+    language || DEFAULT_POCKET_TTS.language,
   ];
   return [
     // Prefer a user-level install so other Cursor projects do not run uvx
@@ -70,17 +75,17 @@ export function pocketTtsSpawnOptions(
 }
 
 export async function resolvePocketTtsListenTarget(
-  settings: PocketTtsSettings
+  settings: PocketTtsSettings,
+  options: { skipPorts?: number[] } = {}
 ): Promise<PocketTtsListenTarget> {
+  const skip = new Set(options.skipPorts || []);
   const configured = parseListenAddress(settings.baseUrl, DEFAULT_POCKET_TTS_PORT);
-  const fromEnv = Boolean(process.env.POCKET_TTS_URL);
-  const preferredPort =
-    !fromEnv && configured.port === LEGACY_POCKET_TTS_PORT
-      ? DEFAULT_POCKET_TTS_PORT
-      : configured.port;
+  const preferredPort = skip.has(configured.port)
+    ? configured.port + 1
+    : configured.port;
 
   const configuredUrl = normalizeBaseUrl(settings.baseUrl);
-  if (await isPocketTtsHealthy(configuredUrl, OCCUPIED_HEALTH_TIMEOUT_MS)) {
+  if (!skip.has(configured.port) && await isPocketTtsHealthy(configuredUrl, OCCUPIED_HEALTH_TIMEOUT_MS)) {
     return {
       host: configured.host,
       port: configured.port,
@@ -89,23 +94,13 @@ export async function resolvePocketTtsListenTarget(
     };
   }
 
-  const defaultUrl = buildBaseUrl(configured.host, DEFAULT_POCKET_TTS_PORT);
-  if (
-    preferredPort !== configured.port &&
-    (await isPocketTtsHealthy(defaultUrl, OCCUPIED_HEALTH_TIMEOUT_MS))
-  ) {
-    return {
-      host: configured.host,
-      port: DEFAULT_POCKET_TTS_PORT,
-      baseUrl: defaultUrl,
-      alreadyRunning: true,
-    };
-  }
-
   for (let i = 0; i < 30; i++) {
     const port = preferredPort + i;
     if (port > 65535) {
       break;
+    }
+    if (skip.has(port)) {
+      continue;
     }
     const baseUrl = buildBaseUrl(configured.host, port);
     if (await isPortAvailable(port, configured.host)) {
@@ -136,24 +131,44 @@ export async function resolvePocketTtsListenTarget(
   };
 }
 
-export function persistPocketTtsBaseUrl(baseUrl: string): void {
-  if (process.env.POCKET_TTS_URL) {
+export function persistPocketTtsProfileUrl(kind: SpeechLanguage, baseUrl: string): void {
+  if (kind === "english" && process.env.POCKET_TTS_URL) {
+    return;
+  }
+  if (kind === "spanish" && process.env.POCKET_TTS_SPANISH_URL) {
     return;
   }
   const current = loadConfig();
-  if (current.pocketTts.baseUrl === baseUrl) {
+  const profile = { ...current.pocketTts[kind], baseUrl };
+  const pocketTts = {
+    ...current.pocketTts,
+    [kind]: profile,
+  };
+  if (kind === "english") {
+    pocketTts.baseUrl = baseUrl;
+  }
+  if (pocketTts[kind].baseUrl === current.pocketTts[kind].baseUrl && current.pocketTts.baseUrl === pocketTts.baseUrl) {
     return;
   }
-  saveConfig({
-    pocketTts: {
-      ...current.pocketTts,
-      baseUrl,
-    },
-  });
+  saveConfig({ pocketTts });
 }
 
-function applyResolvedUrl(settings: PocketTtsSettings, baseUrl: string): void {
+/** @deprecated Use persistPocketTtsProfileUrl. Kept for the foreground starter. */
+export function persistPocketTtsBaseUrl(baseUrl: string): void {
+  persistPocketTtsProfileUrl("english", baseUrl);
+}
+
+function applyResolvedUrl(
+  settings: PocketTtsSettings,
+  baseUrl: string,
+  kind?: SpeechLanguage
+): void {
   settings.baseUrl = baseUrl;
+  if (kind) {
+    settings[kind] = { ...settings[kind], baseUrl };
+    persistPocketTtsProfileUrl(kind, baseUrl);
+    return;
+  }
   persistPocketTtsBaseUrl(baseUrl);
 }
 
@@ -169,7 +184,7 @@ function spawnServe(command: string, args: string[]): ChildProcess {
 
 async function trySpawn(settings: PocketTtsSettings): Promise<ChildProcess> {
   const { host, port } = parseListenAddress(settings.baseUrl, DEFAULT_POCKET_TTS_PORT);
-  const attempts = pocketTtsServeAttempts(host, port, settings.language || "english");
+  const attempts = pocketTtsServeAttempts(host, port, settings.language || DEFAULT_POCKET_TTS.language);
 
   let lastError: unknown;
   for (const attempt of attempts) {
@@ -219,14 +234,20 @@ async function trySpawn(settings: PocketTtsSettings): Promise<ChildProcess> {
   );
 }
 
-export async function ensurePocketTtsServer(settings: PocketTtsSettings): Promise<string> {
-  let target = await resolvePocketTtsListenTarget(settings);
-  applyResolvedUrl(settings, target.baseUrl);
+export async function ensurePocketTtsServer(
+  settings: PocketTtsSettings,
+  options: EnsurePocketTtsOptions = {}
+): Promise<string> {
+  const kind = options.kind;
+  const sidecarKey = kind || settings.language || "default";
+  let target = await resolvePocketTtsListenTarget(settings, { skipPorts: options.skipPorts });
+  applyResolvedUrl(settings, target.baseUrl, kind);
 
   if (target.alreadyRunning) {
     return target.baseUrl;
   }
 
+  let sidecar = sidecars.get(sidecarKey);
   if (!sidecar || sidecar.killed || sidecar.exitCode !== null) {
     let lastError: unknown;
     for (let attempt = 0; attempt < BIND_RETRY_LIMIT; attempt++) {
@@ -238,11 +259,12 @@ export async function ensurePocketTtsServer(settings: PocketTtsSettings): Promis
           baseUrl: buildBaseUrl(target.host, port),
           alreadyRunning: false,
         };
-        applyResolvedUrl(settings, target.baseUrl);
+        applyResolvedUrl(settings, target.baseUrl, kind);
         console.error(`[TTS] Retrying Pocket TTS on ${target.baseUrl}`);
       }
       try {
         sidecar = await trySpawn({ ...settings, baseUrl: target.baseUrl });
+        sidecars.set(sidecarKey, sidecar);
         lastError = undefined;
         break;
       } catch (error) {
@@ -258,7 +280,7 @@ export async function ensurePocketTtsServer(settings: PocketTtsSettings): Promis
   const startedAt = Date.now();
   while (Date.now() - startedAt < STARTUP_TIMEOUT_MS) {
     if (await isPocketTtsHealthy(settings.baseUrl, 1500)) {
-      console.error(`[TTS] Pocket TTS server is ready at ${settings.baseUrl}`);
+      console.error(`[TTS] Pocket TTS server is ready at ${settings.baseUrl} (${sidecarKey})`);
       return settings.baseUrl;
     }
     if (sidecar.killed || sidecar.exitCode !== null) {
