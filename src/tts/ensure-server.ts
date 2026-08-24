@@ -8,6 +8,7 @@ import {
   DEFAULT_POCKET_TTS_PORT,
   findAvailablePort,
   isPortAvailable,
+  LEGACY_POCKET_TTS_PORT,
   parseListenAddress,
 } from "../ports.js";
 import { isPocketTtsHealthy, normalizeBaseUrl } from "./pocket-tts.js";
@@ -122,7 +123,7 @@ export async function resolvePocketTtsListenTarget(
     console.error(`[TTS] Port ${port} is in use; trying the next one`);
   }
 
-  const port = await findAvailablePort(preferredPort, configured.host);
+  const port = await findAvailablePort(preferredPort, configured.host, undefined, skip);
   return {
     host: configured.host,
     port,
@@ -240,8 +241,13 @@ export async function ensurePocketTtsServer(
 ): Promise<string> {
   const kind = options.kind;
   const sidecarKey = kind || settings.language || "default";
-  let target = await resolvePocketTtsListenTarget(settings, { skipPorts: options.skipPorts });
+  const skipPorts = [...(options.skipPorts || []), LEGACY_POCKET_TTS_PORT];
+  let target = await resolvePocketTtsListenTarget(settings, { skipPorts });
   applyResolvedUrl(settings, target.baseUrl, kind);
+  console.error(
+    `[TTS] ${target.alreadyRunning ? "Reusing" : "Starting"} Pocket TTS ` +
+      `${sidecarKey} at ${target.baseUrl} (model=${settings.language})`
+  );
 
   if (target.alreadyRunning) {
     return target.baseUrl;
@@ -252,7 +258,7 @@ export async function ensurePocketTtsServer(
     let lastError: unknown;
     for (let attempt = 0; attempt < BIND_RETRY_LIMIT; attempt++) {
       if (attempt > 0) {
-        const port = await findAvailablePort(target.port + 1, target.host);
+        const port = await findAvailablePort(target.port + 1, target.host, undefined, skipPorts);
         target = {
           host: target.host,
           port,
@@ -260,7 +266,7 @@ export async function ensurePocketTtsServer(
           alreadyRunning: false,
         };
         applyResolvedUrl(settings, target.baseUrl, kind);
-        console.error(`[TTS] Retrying Pocket TTS on ${target.baseUrl}`);
+        console.error(`[TTS] Retrying Pocket TTS ${sidecarKey} on ${target.baseUrl}`);
       }
       try {
         sidecar = await trySpawn({ ...settings, baseUrl: target.baseUrl });

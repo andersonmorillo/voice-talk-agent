@@ -1,10 +1,10 @@
 {
-  "ttsProvider": "pocket-tts",
+  "ttsProvider": "elevenlabs",
   "pocketTts": {
     "baseUrl": "http://127.0.0.1:18741",
     "voice": "alba",
     "language": "english",
-    "autoStart": true,
+    "autoStart": false,
     "speechLanguage": "auto",
     "english": {
       "baseUrl": "http://127.0.0.1:18741",
@@ -26,6 +26,7 @@
     "similarityBoost": 0.75,
     "style": 0.0
   },
+  "volume": 1.0,
   "autoSubmit": {
     "enabled": false,
     "silenceDelay": 3.0,

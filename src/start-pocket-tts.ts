@@ -2,14 +2,14 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import { DEFAULT_POCKET_TTS, getEffectiveConfig } from "./config.js";
-import { parseListenAddress } from "./ports.js";
 import {
   persistPocketTtsProfileUrl,
   pocketTtsServeAttempts,
   pocketTtsSpawnOptions,
   resolvePocketTtsListenTarget,
 } from "./tts/ensure-server.js";
-import { normalizeSpeechLanguage } from "./tts/language.js";
+import { pocketSettingsForSpeech } from "./tts/index.js";
+import { normalizeSpeechLanguage, type SpeechLanguage } from "./tts/language.js";
 
 async function waitForSpawn(child: ChildProcess, command: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -70,17 +70,17 @@ async function spawnForeground(
 
 async function main(): Promise<void> {
   const config = getEffectiveConfig();
-  const mode = normalizeSpeechLanguage(config.pocketTts.speechLanguage);
-  const kind = mode === "spanish" ? "spanish" : "english";
-  const profile = config.pocketTts[kind];
-  const other = kind === "spanish" ? config.pocketTts.english : config.pocketTts.spanish;
-  const skipPorts = [parseListenAddress(other.baseUrl).port];
-  const settings = {
-    ...config.pocketTts,
-    baseUrl: profile.baseUrl,
-    voice: profile.voice,
-    language: profile.language,
-  };
+  const arg = (process.argv[2] || "").trim().toLowerCase();
+  const kind: SpeechLanguage =
+    arg === "spanish" || arg === "es"
+      ? "spanish"
+      : arg === "english" || arg === "en"
+        ? "english"
+        : normalizeSpeechLanguage(config.pocketTts.speechLanguage) === "spanish"
+          ? "spanish"
+          : "english";
+  const sample = kind === "spanish" ? "Hola" : "Hello";
+  const { settings, skipPorts } = pocketSettingsForSpeech(config, sample, kind);
   const target = await resolvePocketTtsListenTarget(settings, { skipPorts });
   persistPocketTtsProfileUrl(kind, target.baseUrl);
 

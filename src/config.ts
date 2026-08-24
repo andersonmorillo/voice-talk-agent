@@ -6,6 +6,8 @@ import {
   DEFAULT_LISTEN_HOST,
   DEFAULT_POCKET_TTS_PORT,
   DEFAULT_SPANISH_POCKET_TTS_PORT,
+  LEGACY_POCKET_TTS_PORT,
+  parseListenAddress,
 } from "./ports.js";
 import { normalizeSpeechLanguage, type SpeechLanguageMode } from "./tts/language.js";
 
@@ -144,18 +146,44 @@ function mergeProfile(
   };
 }
 
+function migrateLanguageProfilePorts(
+  english: PocketTtsLanguageProfile,
+  spanish: PocketTtsLanguageProfile
+): { english: PocketTtsLanguageProfile; spanish: PocketTtsLanguageProfile } {
+  const nextEnglish = { ...english };
+  const nextSpanish = { ...spanish };
+  if (parseListenAddress(nextEnglish.baseUrl).port === LEGACY_POCKET_TTS_PORT) {
+    nextEnglish.baseUrl = DEFAULT_ENGLISH_PROFILE.baseUrl;
+  }
+  const englishPort = parseListenAddress(nextEnglish.baseUrl).port;
+  const spanishPort = parseListenAddress(nextSpanish.baseUrl, DEFAULT_SPANISH_POCKET_TTS_PORT).port;
+  if (spanishPort === LEGACY_POCKET_TTS_PORT || spanishPort === englishPort) {
+    nextSpanish.baseUrl = DEFAULT_SPANISH_PROFILE.baseUrl;
+  }
+  return { english: nextEnglish, spanish: nextSpanish };
+}
+
+function nonLegacyBaseUrl(baseUrl: string | undefined, fallback: string): string {
+  if (!baseUrl) {
+    return fallback;
+  }
+  return parseListenAddress(baseUrl).port === LEGACY_POCKET_TTS_PORT ? fallback : baseUrl;
+}
+
 export function mergePocketTts(parsed?: Partial<PocketTtsSettings>): PocketTtsSettings {
-  const english = mergeProfile(DEFAULT_ENGLISH_PROFILE, parsed?.english);
-  const spanish = mergeProfile(DEFAULT_SPANISH_PROFILE, parsed?.spanish);
+  const migrated = migrateLanguageProfilePorts(
+    mergeProfile(DEFAULT_ENGLISH_PROFILE, parsed?.english),
+    mergeProfile(DEFAULT_SPANISH_PROFILE, parsed?.spanish)
+  );
   return {
     ...DEFAULT_POCKET_TTS,
     ...(parsed || {}),
     speechLanguage: normalizeSpeechLanguage(parsed?.speechLanguage ?? DEFAULT_POCKET_TTS.speechLanguage),
-    english,
-    spanish,
-    baseUrl: parsed?.baseUrl || english.baseUrl,
-    voice: parsed?.voice || english.voice,
-    language: parsed?.language || english.language,
+    english: migrated.english,
+    spanish: migrated.spanish,
+    baseUrl: nonLegacyBaseUrl(parsed?.baseUrl, migrated.english.baseUrl),
+    voice: parsed?.voice || migrated.english.voice,
+    language: parsed?.language || migrated.english.language,
     autoStart: parsed?.autoStart !== undefined ? parsed.autoStart : DEFAULT_POCKET_TTS.autoStart,
   };
 }

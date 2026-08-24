@@ -3,7 +3,7 @@ export type SpeechLanguageMode = "auto" | SpeechLanguage;
 
 const SPANISH_CHARS = /[áéíóúñü¿¡]/i;
 const SPANISH_WORDS =
-  /\b(el|la|los|las|un|una|unos|unas|de|del|al|que|por|para|con|su|se|lo|le|me|te|nos|está|están|estoy|estás|voy|vamos|hola|gracias|listo|ahora|también|muy|más|pero|como|este|esta|esto|aquí|archivo|proyecto|código|configuración|habla|voz|español|puedo|puede|hacer)\b/gi;
+  /\b(el|la|los|las|un|una|unos|unas|de|del|al|que|por|para|con|su|se|lo|le|me|te|nos|está|estan|están|estoy|estás|estas|voy|vamos|hola|gracias|listo|ahora|también|tambien|muy|más|mas|pero|como|este|esta|esto|aquí|aqui|archivo|proyecto|código|codigo|configuración|configuracion|habla|voz|español|espanol|puedo|puede|hacer|servidor|idioma|texto|usuario|respuesta|correcto|entonces|porque|hay|tiene|quiero|puedes|bien|después|despues|antes|siempre|nunca)\b/gi;
 const ENGLISH_WORDS =
   /\b(the|and|is|are|to|for|with|you|your|this|that|was|were|will|from|have|has|been|it's|i'll|we're|hello|please|using|done|ready|file|project|build|config|working)\b/gi;
 

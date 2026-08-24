@@ -48,14 +48,19 @@ export function isPortAvailable(port: number, host = DEFAULT_LISTEN_HOST): Promi
 export async function findAvailablePort(
   preferred: number,
   host = DEFAULT_LISTEN_HOST,
-  maxAttempts = PORT_SCAN_LIMIT
+  maxAttempts = PORT_SCAN_LIMIT,
+  skipPorts: Iterable<number> = []
 ): Promise<number> {
   const start = Number.isFinite(preferred) && preferred > 0 ? preferred : DEFAULT_POCKET_TTS_PORT;
+  const skip = new Set(skipPorts);
 
   for (let i = 0; i < maxAttempts; i++) {
     const port = start + i;
     if (port > 65535) {
       break;
+    }
+    if (skip.has(port)) {
+      continue;
     }
     if (await isPortAvailable(port, host)) {
       return port;

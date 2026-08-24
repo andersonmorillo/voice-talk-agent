@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getEffectiveConfig } from "./config.js";
-import { speak, stopPlayback } from "./tts/index.js";
+import { resolveSpeechLanguage, speak, stopPlayback } from "./tts/index.js";
 import { writeFileSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -45,9 +45,15 @@ async function processTTSQueue() {
 
     try {
       const config = getEffectiveConfig();
-      console.error(`[TTS] Speaking (${config.ttsProvider}${item.language ? `/${item.language}` : ""}): ${item.text}`);
+      const kind = resolveSpeechLanguage(
+        item.text,
+        item.language || config.pocketTts.speechLanguage
+      );
+      console.error(
+        `[TTS] Speaking ${kind} (${config.ttsProvider}${item.language ? `/${item.language}` : "/auto"}): ${item.text}`
+      );
 
-      await speak(config, item.text, item.language);
+      await speak(config, item.text, item.language || "auto");
 
       // Write TTS completion signal for background script
       const completionPath = join(__dirname, "..", "tts-complete.json");
@@ -110,7 +116,7 @@ server.registerTool(
   "speak",
   {
     description:
-      "Speak text aloud using text-to-speech. Write the announcement in the same language you want spoken (Spanish or English). Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
+      "Speak text aloud using text-to-speech. Write the announcement in the same language you want spoken (Spanish or English). The matching local Pocket TTS server starts automatically from the text language. Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
     inputSchema: {
       text: z
         .string()
