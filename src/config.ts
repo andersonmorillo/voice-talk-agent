@@ -120,7 +120,7 @@ const DEFAULT_CONFIG: Config = {
   ttsProvider: "pocket-tts",
   pocketTts: { ...DEFAULT_POCKET_TTS, english: { ...DEFAULT_ENGLISH_PROFILE }, spanish: { ...DEFAULT_SPANISH_PROFILE } },
   apiKey: "",
-  voiceId: "21m00Tcm4TlvDq8ikWAM",
+  voiceId: "cgSgspJ2msm6clMCkdW9",
   model: "eleven_flash_v2_5",
   voiceSettings: { ...DEFAULT_VOICE_SETTINGS },
   volume: 1.0,

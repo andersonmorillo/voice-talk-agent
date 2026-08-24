@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tts": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/build/index.js"]
+    }
+  }
+}

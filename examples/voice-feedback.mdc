@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Voice Feedback Rule
 
-You MUST use the `speak` tool at these moments:
+You MUST use the TTS MCP `speak` tool (Cursor `user-tts` / Claude Code `mcp__tts__speak` / Codex `speak`) at these moments:
 
 - **Task Start**: Briefly announce what you're about to do
 - **Task Completion**: Summarize what was done

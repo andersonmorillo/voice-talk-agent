@@ -1,0 +1,10 @@
+# Project-scoped Codex MCP config (loaded for trusted projects).
+# Speak can take longer than the 60s default while Pocket TTS starts or audio plays.
+
+[mcp_servers.tts]
+command = "node"
+args = ["build/index.js"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+default_tools_approval_mode = "auto"
+enabled_tools = ["speak", "stop_speaking", "current_project", "listen"]

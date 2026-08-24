@@ -1,13 +1,13 @@
 # Talk to Cursor
 
-A hands-free voice interface for Cursor AI. The coding assistant speaks progress updates, completions, and responses aloud using local [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (CPU, no API key) by default, with optional ElevenLabs cloud TTS.
+A hands-free voice MCP for **Cursor**, **Claude Code**, and **OpenAI Codex**. The coding assistant speaks progress updates, completions, and responses aloud using local [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (CPU, no API key) by default, with optional ElevenLabs cloud TTS.
 
 This repository is a derivative of [MindSyncTech/talk-to-cursor](https://github.com/MindSyncTech/talk-to-cursor) (Talk to Cursor by Mike Sheehan). See [License](#license). This fork adds local Pocket TTS and **Spanish + English** speech.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20 or newer
-- [Cursor](https://cursor.com/)
+- At least one MCP client: [Cursor](https://cursor.com/), [Claude Code](https://code.claude.com/docs/en/quickstart), or [OpenAI Codex](https://developers.openai.com/codex)
 - [uv](https://docs.astral.sh/uv/) (recommended) or `pip install pocket-tts`
 
 Playback works with `mpv`, `ffplay` (ffmpeg), or the built-in Windows SoundPlayer. On Windows you usually do not need extra audio tools.
@@ -35,7 +35,20 @@ Copy-Item config.example.json config.json
 
 Do not commit `config.json` or `.env`. They can hold API keys.
 
-## Configure Cursor
+## Configure agents
+
+Build once, then register the same `build/index.js` MCP server with each client. From this repo:
+
+```bash
+npm run build
+npm run setup-agents
+```
+
+`setup-agents` registers a **user-scope** `tts` server with Claude Code if the `claude` CLI is installed, writes `~/.codex/config.toml` for Codex, and allows the speak tools so they are not prompted every time.
+
+Do **not** copy this repo into other projects. One global MCP entry per client is enough: every workspace shares the same MCP process and the same Pocket TTS server.
+
+### Cursor
 
 Edit or create `~/.cursor/mcp.json` (Windows: `%USERPROFILE%\.cursor\mcp.json`):
 
@@ -57,7 +70,44 @@ Replace the path with the real location of this project:
 
 Fully quit Cursor and reopen it so the MCP server loads.
 
-Do **not** copy this repo into other Cursor projects or run `npx` / `npm install` from those workspaces. One global `mcp.json` entry is enough: every project shares the same MCP process and the same Pocket TTS server.
+### Claude Code
+
+This repo already includes a project-scoped [`.mcp.json`](.mcp.json) (Claude Code expands `${CLAUDE_PROJECT_DIR:-.}`). Voice instructions live in [`CLAUDE.md`](CLAUDE.md) and [`.claude/settings.json`](.claude/settings.json).
+
+To use voice in **every** Claude Code project, register user scope (or run `npm run setup-agents`):
+
+```bash
+claude mcp add --scope user tts -- node /ABSOLUTE/PATH/TO/talk-to-cursor/build/index.js
+```
+
+On Windows PowerShell:
+
+```powershell
+claude mcp add --scope user tts -- node "$PWD\build\index.js"
+```
+
+Verify with `claude mcp list`. The first session in a folder may ask you to trust the project `.mcp.json` and allow `mcp__tts__speak`. Ask: **Say hello using the speak tool**.
+
+See [Claude Code MCP](https://code.claude.com/docs/en/mcp) and the copy-paste example in [`examples/claude.mcp.json`](examples/claude.mcp.json).
+
+### Codex
+
+This repo includes a project-scoped [`.codex/config.toml`](.codex/config.toml). Codex loads it only for **trusted** projects. Voice instructions live in [`AGENTS.md`](AGENTS.md) (Codex reads this automatically).
+
+To use voice in every Codex session, add the same block to `~/.codex/config.toml` (or run `npm run setup-agents`):
+
+```toml
+[mcp_servers.tts]
+command = "node"
+args = ["/ABSOLUTE/PATH/TO/talk-to-cursor/build/index.js"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+default_tools_approval_mode = "auto"
+```
+
+Then start Codex in this folder, trust the project if prompted, and run `/mcp` to confirm `tts` is connected. Ask it to say hello with `speak`.
+
+See [Codex MCP](https://developers.openai.com/codex/mcp) and [`examples/codex.config.toml`](examples/codex.config.toml). `tool_timeout_sec` is 120s because the first Pocket TTS start (and playback) can exceed the 60s default.
 
 ## First speech
 
@@ -112,12 +162,12 @@ The first time each language is used, Pocket TTS downloads that model. After tha
 
 Pass `language: "spanish"` or `language: "english"` to `speak` when you already know the language. The agent should speak in the same language the user is using.
 
-ElevenLabs also works in both languages if you keep a multilingual model such as `eleven_flash_v2_5` or `eleven_multilingual_v2`.
+ElevenLabs also works in both languages if you keep a multilingual model such as `eleven_flash_v2_5` or `eleven_multilingual_v2`. On the free API, use a **premade** voice (for example Jessica). Voice Library voices are rejected with HTTP 402.
 
 ## Test it
 
-1. Open a new Cursor chat.
-2. Check that the `speak` tool appears under Available Tools.
+1. Open a new Cursor chat, a Claude Code session (`claude`), or Codex in this folder.
+2. Check that the `speak` tool is available (`/mcp` in Claude Code and Codex).
 3. Type: **Say hello using the speak tool** or **Di hola usando la herramienta speak**.
 4. You should hear audio on your speakers.
 
@@ -130,14 +180,16 @@ The MCP server also provides:
 
 ## Skills & Voice Feedback Modes
 
-A dedicated Agent Skill is available at `.cursor/skills/voice-feedback/SKILL.md` (and globally in `~/.cursor/skills/voice-feedback/`):
+A dedicated Agent Skill is available at `.agents/skills/voice-feedback/SKILL.md` (Claude Code also loads `.claude/skills/voice-feedback/`):
 
 1. **Project-Aware Mode**: Prefixes spoken updates with the active project name (e.g. `"[talk-to-cursor]: Finished build."`) so you can identify which agent/workspace is giving feedback when working on multiple projects in parallel.
 2. **Direct Mode**: Speaks concisely without project prefixes for single-workspace tasks.
 
 ## Optional: voice feedback rule
 
-Copy [`examples/voice-feedback.mdc`](examples/voice-feedback.mdc) to `.cursor/rules/voice-feedback.mdc` in this project (or into `~/.cursor/rules/`) so the agent speaks at task start and completion.
+- **Cursor:** copy [`examples/voice-feedback.mdc`](examples/voice-feedback.mdc) to `.cursor/rules/voice-feedback.mdc` (or `~/.cursor/rules/`).
+- **Claude Code:** [`CLAUDE.md`](CLAUDE.md) and `.claude/skills/voice-feedback/` are already in the repo.
+- **Codex:** [`AGENTS.md`](AGENTS.md) and `.agents/skills/voice-feedback/` are already in the repo.
 
 ## Optional: ElevenLabs
 
@@ -146,8 +198,21 @@ Switch the provider to ElevenLabs in the settings UI and paste an API key, or se
 ```bash
 TTS_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=your_api_key_here
-ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+ELEVENLABS_VOICE_ID=cgSgspJ2msm6clMCkdW9   # Jessica (premade)
 ```
+
+Use a **premade** voice from your ElevenLabs account. The free API cannot use Voice Library voices (`402 paid_plan_required`). The old Rachel id `21m00Tcm4TlvDq8ikWAM` is a library voice and will fail on a free plan.
+
+Premade voices are labeled English but speak Spanish with a multilingual model (`eleven_flash_v2_5` by default). Jessica is the example voice in this repo. Other premade ids that work the same way:
+
+| Voice | ID |
+|-------|-----|
+| Jessica | `cgSgspJ2msm6clMCkdW9` |
+| Sarah | `EXAVITQu4vr4xnSDxMaL` |
+| Alice | `Xb7hH8MSUJpSbSDYk0k2` |
+| George | `JBFqnCBsd6RMkjVDRZzb` |
+
+If ElevenLabs fails (library voice, quota, or network), speech falls back to local Pocket TTS automatically.
 
 See [`.env.example`](.env.example). Environment variables override `config.json`.
 
@@ -186,6 +251,8 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 | `pocketTts.spanish.language` | Spanish model | `spanish_24l` |
 | `pocketTts.autoStart` | Spawn the server if it is down | `true` |
 | `apiKey` | Optional ElevenLabs API key | (empty) |
+| `voiceId` | ElevenLabs voice id (premade on the free API) | `cgSgspJ2msm6clMCkdW9` (Jessica) |
+| `model` | ElevenLabs model | `eleven_flash_v2_5` |
 | `autoListen` | Auto-listen after tasks | `true` |
 
 ## Scripts
@@ -197,14 +264,18 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 | `npm run pocket-tts` | Start the local Pocket TTS server (English on 18741 by default) |
 | `npm run install-tts` | Install Pocket TTS once with uv (`uv tool install pocket-tts`) |
 | `npm run auto-submit` | Auto-submit + voice loop (macOS) |
+| `npm run setup-agents` | Register the TTS MCP with Claude Code and Codex |
+| `npm run mcp` | Run the MCP server on stdio (used by clients) |
 
 ## Troubleshooting
 
-**Tool does not appear in Cursor**
+**Tool does not appear in Cursor / Claude Code / Codex**
 
-- Fully quit and restart Cursor.
-- Check that `mcp.json` uses the correct absolute path to `build/index.js`.
-- Run `npm run build`.
+- Run `npm run build`, then `npm run setup-agents`.
+- Cursor: fully quit and restart. Check `~/.cursor/mcp.json` points at `build/index.js`.
+- Claude Code: `claude mcp list`. Restart the CLI. Approve the project `.mcp.json` if asked.
+- Codex: trust the project, then `/mcp`. Confirm `~/.codex/config.toml` or `.codex/config.toml` has `[mcp_servers.tts]`.
+- Codex speak timeouts: keep `tool_timeout_sec = 120` (first Pocket TTS start can be slow).
 
 **Pocket TTS not speaking**
 
@@ -219,6 +290,13 @@ Wispr Flow loop additionally needs `sounddevice`, `numpy`, PortAudio, and Microp
 - Check system volume.
 - Install `mpv` or ffmpeg (`ffplay`) if Windows SoundPlayer is not enough.
 - Confirm Pocket TTS is selected unless you intend to use ElevenLabs.
+
+**ElevenLabs silent / `402 paid_plan_required`**
+
+- Free accounts can only use **premade** voices via the API, not Voice Library voices.
+- Set `voiceId` to a premade voice such as Jessica (`cgSgspJ2msm6clMCkdW9`).
+- Keep `model` multilingual (`eleven_flash_v2_5` or `eleven_multilingual_v2`) for Spanish.
+- If ElevenLabs still fails, the server falls back to Pocket TTS. Leave `pocketTts.autoStart` on so that fallback can start the local server.
 
 **"API key not set"**
 

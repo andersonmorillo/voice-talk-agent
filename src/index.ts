@@ -16,11 +16,17 @@ const __dirname = dirname(__filename);
 // Load config (config.json with env var overrides)
 const config = getEffectiveConfig();
 
-// Create server instance
-const server = new McpServer({
-  name: "cursor-tts",
-  version: "1.0.0",
-});
+// Create server instance (works with Cursor, Claude Code, and Codex)
+const server = new McpServer(
+  {
+    name: "tts",
+    version: "1.0.0",
+  },
+  {
+    instructions:
+      "Speak every user-facing reply aloud with the speak tool. Keep spoken text to 1-2 sentences in the same language as the user. Announce task start, progress, completion, and errors. Pass language spanish or english when known; otherwise auto. Call stop_speaking if the user asks for silence. Use current_project when multiple workspaces might be speaking.",
+  }
+);
 
 // TTS queue to prevent overlapping audio
 interface TTSQueueItem {
@@ -268,7 +274,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.error(`[TTS] Starting Cursor TTS MCP Server...`);
+  console.error(`[TTS] Starting TTS MCP Server...`);
   console.error(`[TTS] Provider: ${config.ttsProvider}`);
   if (config.ttsProvider === "pocket-tts") {
     console.error(

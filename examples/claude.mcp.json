@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tts": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/talk-to-cursor/build/index.js"]
+    }
+  }
+}
