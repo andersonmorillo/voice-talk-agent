@@ -1,13 +1,22 @@
 ---
-description: Optional voice feedback — agent speaks at task start and completion
+description: Optional voice feedback — agent speaks at task start, milestones, and completion
 alwaysApply: true
 ---
 
 # Voice Feedback Rule
 
-You MUST use the TTS MCP `speak` tool (Cursor `user-tts` / Claude Code `mcp__tts__speak` / Codex `speak`) at these moments:
+You MUST use the TTS MCP `speak` tool (Cursor `user-tts` / Claude Code `mcp__tts__speak` / Codex `speak`) on user-facing replies.
+
+Pick a mode from context:
+
+- **Mode 1 (multi-project):** call `current_project` and prefix speech with the project name (`"[talk-to-cursor]: Starting …"` / `"…: Finished …"`).
+- **Mode 2 (single project):** speak without a project prefix.
+
+Announce:
 
 - **Task Start**: Briefly announce what you're about to do
+- **Key Milestones**: Critical intermediate steps
 - **Task Completion**: Summarize what was done
+- **Blocking errors**: Speak when the user must decide
 
-Speak in the same language the user is using (Spanish or English). Keep messages concise (1-2 sentences). Always speak at start and end of every task.
+Speak in the same language the user is using (Spanish or English). Keep messages concise (1-2 sentences). Write the full answer in chat; do not speak code or long lists. If the user says stop, silence, or be quiet, call `stop_speaking`. After a hands-free Wispr Flow loop, call `listen`.

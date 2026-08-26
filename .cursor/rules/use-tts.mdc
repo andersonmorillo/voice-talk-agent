@@ -8,8 +8,13 @@ Utiliza la herramienta de habla (`user-tts` / tool `speak`) del MCP en todas tus
 - **Siempre que respondas al usuario**, habla en voz alta el contenido principal de tu respuesta usando la herramienta `speak`.
 - Habla **en el mismo idioma que el usuario**: español si escribe en español, inglés si escribe en inglés.
 - El texto hablado debe ser **conciso** (1 a 2 frases máximo). Pasa `language: "spanish"` o `language: "english"` cuando sepas el idioma; si no, usa `auto`.
+- Elige el modo según el contexto:
+  - **Modo 1 (varios proyectos):** llama a `current_project` y antepone el nombre del proyecto: `"[Proyecto]: Starting …"` / `"…: Finished …"`.
+  - **Modo 2 (un solo proyecto):** habla sin prefijo de repositorio.
 - Utilízalo al anunciar:
   - El inicio y el final de una tarea.
   - Progresos e hitos importantes.
   - Completaciones, errores y actualizaciones relevantes.
+- Si el usuario pide silencio (`stop`, `silence`, `be quiet`), llama a `stop_speaking`.
+- En un bucle manos libres (Wispr Flow), llama a `listen` al terminar la tarea.
 - Si el MCP de voz está disponible, no omitas el paso de hablarle al usuario.
