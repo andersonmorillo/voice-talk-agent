@@ -1,8 +1,9 @@
 import { spawn } from "child_process";
 import { randomBytes } from "crypto";
-import { unlink, writeFile } from "fs/promises";
+import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { clampSpeechSpeed, scaleWavSampleRate } from "./speech-speed.js";
 
 const isWindows = process.platform === "win32";
 let activeChild: ReturnType<typeof spawn> | undefined;
@@ -40,22 +41,47 @@ export function stopPlayback(): boolean {
   return true;
 }
 
-async function playWithMpv(filePath: string): Promise<void> {
-  await run("mpv", ["--no-terminal", "--really-quiet", filePath]);
+async function playWithMpv(filePath: string, speed: number): Promise<void> {
+  const args = ["--no-terminal", "--really-quiet"];
+  if (speed !== 1) {
+    args.push(`--speed=${speed}`);
+  }
+  args.push(filePath);
+  await run("mpv", args);
 }
 
-async function playWithFfplay(filePath: string): Promise<void> {
-  await run("ffplay", ["-nodisp", "-autoexit", "-loglevel", "quiet", filePath]);
+async function playWithFfplay(filePath: string, speed: number): Promise<void> {
+  const args = ["-nodisp", "-autoexit", "-loglevel", "quiet"];
+  if (speed !== 1) {
+    args.push("-af", `atempo=${speed}`);
+  }
+  args.push(filePath);
+  await run("ffplay", args);
 }
 
-async function playWithPowerShell(filePath: string): Promise<void> {
-  const escaped = filePath.replace(/'/g, "''");
-  await run("powershell", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    `(New-Object System.Media.SoundPlayer '${escaped}').PlaySync()`,
-  ]);
+async function playWithPowerShell(filePath: string, speed: number): Promise<void> {
+  let pathToPlay = filePath;
+  let scaledPath: string | undefined;
+  if (speed !== 1) {
+    // ponytail: SoundPlayer has no rate control; sample-rate rewrite changes pitch. Upgrade: rubberband/atempo.
+    scaledPath = filePath.replace(/\.wav$/i, `-s${speed}.wav`);
+    await writeFile(scaledPath, scaleWavSampleRate(await readFile(filePath), speed));
+    pathToPlay = scaledPath;
+  }
+
+  const escaped = pathToPlay.replace(/'/g, "''");
+  try {
+    await run("powershell", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `(New-Object System.Media.SoundPlayer '${escaped}').PlaySync()`,
+    ]);
+  } finally {
+    if (scaledPath) {
+      await unlink(scaledPath).catch(() => undefined);
+    }
+  }
 }
 
 /**
@@ -88,8 +114,9 @@ export function applyVolumeGain(buffer: Buffer, volume = 1.0): Buffer {
  * Play a WAV buffer and wait until playback finishes.
  * Prefers mpv (same as the ElevenLabs SDK), then ffplay, then Windows SoundPlayer.
  */
-export async function playWav(buffer: Buffer, volume = 1.0): Promise<void> {
+export async function playWav(buffer: Buffer, volume = 1.0, speed = 1.0): Promise<void> {
   const processedBuffer = volume !== 1.0 ? applyVolumeGain(buffer, volume) : buffer;
+  const playbackSpeed = clampSpeechSpeed(speed);
   const filePath = join(tmpdir(), `talk-to-cursor-${randomBytes(8).toString("hex")}.wav`);
   await writeFile(filePath, processedBuffer);
 
@@ -97,7 +124,7 @@ export async function playWav(buffer: Buffer, volume = 1.0): Promise<void> {
   try {
     for (const player of [playWithMpv, playWithFfplay, ...(isWindows ? [playWithPowerShell] : [])]) {
       try {
-        await player(filePath);
+        await player(filePath, playbackSpeed);
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

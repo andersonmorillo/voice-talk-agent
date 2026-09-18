@@ -88,7 +88,7 @@ export async function generatePocketTtsWav(
   return Buffer.from(await response.arrayBuffer());
 }
 
-export async function speakWithPocketTts(config: Config, text: string): Promise<void> {
+export async function speakWithPocketTts(config: Config, text: string, speed?: number): Promise<void> {
   const wav = await generatePocketTtsWav(config.pocketTts, text);
-  await playWav(wav, config.volume);
+  await playWav(wav, config.volume, speed ?? config.voiceSettings.speed);
 }

@@ -1,7 +1,8 @@
 import { ElevenLabsClient, play } from "@elevenlabs/elevenlabs-js";
 import type { Config } from "../config.js";
+import { clampElevenLabsSpeed } from "./speech-speed.js";
 
-export async function speakWithElevenLabs(config: Config, text: string): Promise<void> {
+export async function speakWithElevenLabs(config: Config, text: string, speed?: number): Promise<void> {
   if (!config.apiKey) {
     throw new Error(
       "ElevenLabs API key is not set. Add it in the settings UI or set ELEVENLABS_API_KEY."
@@ -13,7 +14,7 @@ export async function speakWithElevenLabs(config: Config, text: string): Promise
     text,
     modelId: config.model,
     voiceSettings: {
-      speed: config.voiceSettings.speed,
+      speed: clampElevenLabsSpeed(speed ?? config.voiceSettings.speed),
       stability: config.voiceSettings.stability,
       similarityBoost: config.voiceSettings.similarityBoost,
       style: config.voiceSettings.style,

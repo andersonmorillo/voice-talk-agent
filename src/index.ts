@@ -24,95 +24,75 @@ const server = new McpServer(
   },
   {
     instructions:
-      "Speak every user-facing reply aloud with the speak tool. Keep spoken text to 1-2 sentences in the same language as the user. Announce task start, progress, completion, and errors. Pass language spanish or english when known; otherwise auto. Call stop_speaking if the user asks for silence. Use current_project when multiple workspaces might be speaking.",
+      "Speak every user-facing reply aloud with the speak tool. Keep spoken text to 1-2 sentences in the same language as the user. Announce task start, progress, completion, and errors. Pass language spanish or english when known; otherwise auto. Optional speed (0.5-2, 1 is normal) changes how fast speech plays. Call stop_speaking if the user asks for silence. Use current_project when multiple workspaces might be speaking.",
   }
 );
 
-// TTS queue to prevent overlapping audio
+// TTS queue to prevent overlapping audio. Playback runs in the background so
+// the MCP speak tool can return immediately and the agent keeps working.
 interface TTSQueueItem {
   text: string;
   language?: string;
-  resolve: (value: any) => void;
-  reject: (error: any) => void;
+  speed?: number;
 }
 
 const ttsQueue: TTSQueueItem[] = [];
 let isProcessingQueue = false;
 
 async function processTTSQueue() {
-  if (isProcessingQueue || ttsQueue.length === 0) {
+  if (isProcessingQueue) {
     return;
   }
 
   isProcessingQueue = true;
 
-  while (ttsQueue.length > 0) {
-    const item = ttsQueue.shift()!;
+  try {
+    while (ttsQueue.length > 0) {
+      const item = ttsQueue.shift()!;
 
-    try {
-      const config = getEffectiveConfig();
-      const kind = resolveSpeechLanguage(
-        item.text,
-        item.language || config.pocketTts.speechLanguage
-      );
-      console.error(
-        `[TTS] Speaking ${kind} (${config.ttsProvider}${item.language ? `/${item.language}` : "/auto"}): ${item.text}`
-      );
+      try {
+        const config = getEffectiveConfig();
+        const kind = resolveSpeechLanguage(
+          item.text,
+          item.language || config.pocketTts.speechLanguage
+        );
+        console.error(
+          `[TTS] Speaking ${kind} (${config.ttsProvider}${item.language ? `/${item.language}` : "/auto"}${item.speed != null ? ` speed=${item.speed}` : ""}): ${item.text}`
+        );
 
-      await speak(config, item.text, item.language || "auto");
+        await speak(config, item.text, item.language || "auto", item.speed);
 
-      // Write TTS completion signal for background script
-      const completionPath = join(__dirname, "..", "tts-complete.json");
-      const completionSignal = {
-        timestamp: new Date().toISOString(),
-        completed: true,
-      };
-      writeFileSync(completionPath, JSON.stringify(completionSignal, null, 2), "utf-8");
-      console.error(`[TTS] Playback complete, signal written: ${completionPath}`);
-
-      item.resolve({
-        content: [
-          {
-            type: "text",
-            text: `Spoken: "${item.text}"`,
-          },
-        ],
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error(`[TTS] Error: ${errorMessage}`);
-
-      item.reject({
-        content: [
-          {
-            type: "text",
-            text: `Failed to speak: ${errorMessage}`,
-          },
-        ],
-        isError: true,
-      });
+        // Write TTS completion signal for background script (Wispr loop)
+        const completionPath = join(__dirname, "..", "tts-complete.json");
+        const completionSignal = {
+          timestamp: new Date().toISOString(),
+          completed: true,
+        };
+        writeFileSync(completionPath, JSON.stringify(completionSignal, null, 2), "utf-8");
+        console.error(`[TTS] Playback complete, signal written: ${completionPath}`);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.error(`[TTS] Error: ${errorMessage}`);
+      }
+    }
+  } finally {
+    isProcessingQueue = false;
+    // ponytail: extra kick if a speak arrived after the loop drained but before the flag cleared
+    if (ttsQueue.length > 0) {
+      void processTTSQueue();
     }
   }
-
-  isProcessingQueue = false;
 }
 
-function queueTTS(text: string, language?: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    ttsQueue.push({ text, language, resolve, reject });
-    processTTSQueue();
-  });
+function queueTTS(text: string, language?: string, speed?: number): void {
+  ttsQueue.push({ text, language, speed });
+  void processTTSQueue();
 }
 
 function stopTTS(): number {
   const queuedCount = ttsQueue.length;
-  while (ttsQueue.length > 0) {
-    const item = ttsQueue.shift()!;
-    item.resolve({
-      content: [{ type: "text", text: "Speech cancelled before playback." }],
-    });
-  }
+  ttsQueue.length = 0;
   stopPlayback();
   return queuedCount;
 }
@@ -122,7 +102,7 @@ server.registerTool(
   "speak",
   {
     description:
-      "Speak text aloud using text-to-speech. Write the announcement in the same language you want spoken (Spanish or English). The matching local Pocket TTS server starts automatically from the text language. Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
+      "Speak text aloud using text-to-speech. Returns immediately; audio keeps playing in the background so you can continue working without waiting for speech to finish. Optional speed controls how fast the voice talks (1.0 is normal). Write the announcement in the same language you want spoken (Spanish or English). The matching local Pocket TTS server starts automatically from the text language. Use this to announce task progress, completions, and important updates so the user can follow along without looking at the screen.",
     inputSchema: {
       text: z
         .string()
@@ -131,11 +111,26 @@ server.registerTool(
         .enum(["auto", "english", "spanish", "en", "es"])
         .optional()
         .describe("Language of the text. Omit or auto to detect from the text. Use spanish or english when you know it."),
+      speed: z
+        .number()
+        .min(0.5)
+        .max(2)
+        .optional()
+        .describe("Speech speed. 1.0 is normal, 0.5 is half, 2.0 is double. Pocket TTS uses the full range; ElevenLabs is clamped to 0.7-1.2. Omit to use the configured default."),
     },
   },
-  async ({ text, language }) => {
-    // Queue the TTS request to prevent overlapping audio
-    return await queueTTS(text, language);
+  async ({ text, language, speed }) => {
+    queueTTS(text, language, speed);
+    return {
+      content: [
+        {
+          type: "text",
+          text: speed == null
+            ? `Speaking in background: "${text}"`
+            : `Speaking in background at speed ${speed}: "${text}"`,
+        },
+      ],
+    };
   }
 );
 

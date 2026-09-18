@@ -27,7 +27,12 @@ export function pocketSettingsForSpeech(
   };
 }
 
-async function speakWithLocalPocketTts(config: Config, text: string, language?: string): Promise<void> {
+async function speakWithLocalPocketTts(
+  config: Config,
+  text: string,
+  language?: string,
+  speed?: number
+): Promise<void> {
   const { settings, kind, skipPorts } = pocketSettingsForSpeech(config, text, language);
   console.error(
     `[TTS] Routing ${kind} speech to ${settings.baseUrl} ` +
@@ -42,21 +47,21 @@ async function speakWithLocalPocketTts(config: Config, text: string, language?: 
     );
   }
 
-  await speakWithPocketTts({ ...config, pocketTts: settings }, text);
+  await speakWithPocketTts({ ...config, pocketTts: settings }, text, speed);
 }
 
-export async function speak(config: Config, text: string, language?: string): Promise<void> {
+export async function speak(config: Config, text: string, language?: string, speed?: number): Promise<void> {
   if (config.ttsProvider !== "elevenlabs") {
-    await speakWithLocalPocketTts(config, text, language);
+    await speakWithLocalPocketTts(config, text, language, speed);
     return;
   }
 
   try {
-    await speakWithElevenLabs(config, text);
+    await speakWithElevenLabs(config, text, speed);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[TTS] ElevenLabs failed (${message}). Falling back to Pocket TTS.`);
-    await speakWithLocalPocketTts(config, text, language);
+    await speakWithLocalPocketTts(config, text, language, speed);
   }
 }
 
