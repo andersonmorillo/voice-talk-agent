@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getEffectiveConfig } from "./config.js";
+import { cancelPlaybackLockWait } from "./tts/playback-lock.js";
 import { resolveSpeechLanguage, speak, stopPlayback } from "./tts/index.js";
 import { writeFileSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
@@ -93,6 +94,7 @@ function queueTTS(text: string, language?: string, speed?: number): void {
 function stopTTS(): number {
   const queuedCount = ttsQueue.length;
   ttsQueue.length = 0;
+  cancelPlaybackLockWait();
   stopPlayback();
   return queuedCount;
 }

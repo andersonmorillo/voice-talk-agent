@@ -1,5 +1,6 @@
 import { ElevenLabsClient, play } from "@elevenlabs/elevenlabs-js";
 import type { Config } from "../config.js";
+import { withPlaybackLock } from "./playback-lock.js";
 import { clampElevenLabsSpeed } from "./speech-speed.js";
 
 export async function speakWithElevenLabs(config: Config, text: string, speed?: number): Promise<void> {
@@ -21,5 +22,5 @@ export async function speakWithElevenLabs(config: Config, text: string, speed?: 
     },
   });
 
-  await play(audio);
+  await withPlaybackLock(() => play(audio));
 }

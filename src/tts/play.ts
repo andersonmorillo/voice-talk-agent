@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { withPlaybackLock } from "./playback-lock.js";
 import { clampSpeechSpeed, scaleWavSampleRate } from "./speech-speed.js";
 
 const isWindows = process.platform === "win32";
@@ -120,20 +121,22 @@ export async function playWav(buffer: Buffer, volume = 1.0, speed = 1.0): Promis
   const filePath = join(tmpdir(), `talk-to-cursor-${randomBytes(8).toString("hex")}.wav`);
   await writeFile(filePath, processedBuffer);
 
-  const errors: string[] = [];
   try {
-    for (const player of [playWithMpv, playWithFfplay, ...(isWindows ? [playWithPowerShell] : [])]) {
-      try {
-        await player(filePath, playbackSpeed);
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push(message);
+    await withPlaybackLock(async () => {
+      const errors: string[] = [];
+      for (const player of [playWithMpv, playWithFfplay, ...(isWindows ? [playWithPowerShell] : [])]) {
+        try {
+          await player(filePath, playbackSpeed);
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          errors.push(message);
+        }
       }
-    }
-    throw new Error(
-      `Could not play audio. Install mpv or ffmpeg (ffplay). Details: ${errors.join("; ")}`
-    );
+      throw new Error(
+        `Could not play audio. Install mpv or ffmpeg (ffplay). Details: ${errors.join("; ")}`
+      );
+    });
   } finally {
     await unlink(filePath).catch(() => undefined);
   }
