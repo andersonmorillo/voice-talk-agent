@@ -67,6 +67,8 @@ export function pocketTtsSpawnOptions(
     env: {
       ...process.env,
       UV_NO_PROJECT: "1",
+      // ponytail: pocket-tts opens language YAML with the locale encoding. On Windows that is cp1252, which crashes on the UTF-8 quotes in spanish_24l.yaml. PYTHONUTF8 makes open() use UTF-8.
+      PYTHONUTF8: "1",
     },
     stdio,
     shell: process.platform === "win32",
